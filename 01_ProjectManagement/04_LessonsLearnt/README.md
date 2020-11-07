@@ -1,1 +1,1 @@
-lessons learnt at the end of the project
+folder which contains the lessons learnt at the end of the project
