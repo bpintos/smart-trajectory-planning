@@ -76,7 +76,7 @@ equation
   der(vel) * mass = F_wheel - F_res;
   //Vehicle lateral dynamic
   delta_rad = delta*pi/180;
-  beta = atan(lf * tan(delta_rad) / (lf + lr));
+  beta = atan(lr * tan(delta_rad) / (lf + lr));
   der(theta) = vel * tan(delta_rad) * cos(beta) / (lf + lr);
   vel_heading = mod(beta + delta_rad,2*pi);
   //Vehicle coordinates calculation
