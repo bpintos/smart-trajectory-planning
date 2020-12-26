@@ -14,7 +14,7 @@ import time
 class VehicleTfmEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
-    def __init__(self, x_goal, y_goal, left_lane, right_lane):
+    def __init__(self, x_goal, y_goal, left_lane, right_lane, center_lane):
         super(VehicleTfmEnv, self).__init__()
         # Define action and observation space
         # They must be gym.spaces objects
@@ -38,6 +38,7 @@ class VehicleTfmEnv(gym.Env):
         self.y_goal = y_goal
         self.left_lane = left_lane
         self.right_lane = right_lane
+        self.center_lane = center_lane
     
         self.viewer = None
         self.display = None
@@ -65,8 +66,11 @@ class VehicleTfmEnv(gym.Env):
         # Reset the state of the environment to an initial state
         self.model.reset()
         res = self.model.simulate(start_time=0, final_time=0)
+        self.state = tuple([res.final(k) for k in ['x','y','theta_out']])
+        self.start_time = 0
+        self.stop_time = self.sample_time
         
-        return tuple([res.final(k) for k in ['x','y','theta_out']])
+        return self.state
     
     def render(self, mode='human', close=False):
         # Render the environment to the screen
@@ -88,8 +92,8 @@ class VehicleTfmEnv(gym.Env):
         veh_width = veh_width*m2pixel
         veh_height = veh_height*m2pixel
         
-        lane_width = 1
-        lane_width = lane_width*m2pixel
+        left_lane_pos = self.left_lane*m2pixel
+        right_lane_pos = self.right_lane*m2pixel
         
         if self.viewer is None:
             from gym.envs.classic_control import rendering
@@ -107,10 +111,10 @@ class VehicleTfmEnv(gym.Env):
             self.viewer.add_geom(vehicle)
 
             # add road lanes
-            left_lane = rendering.Line((img_x_orig - lane_width / 2, 0), (img_x_orig - lane_width / 2, screen_height))
+            left_lane = rendering.Line((img_x_orig + left_lane_pos, 0), (img_x_orig + left_lane_pos, screen_height))
             left_lane.set_color(0, 0, 0)
             self.viewer.add_geom(left_lane)
-            right_lane = rendering.Line((img_x_orig + lane_width / 2, 0), (img_x_orig + lane_width / 2, screen_height))
+            right_lane = rendering.Line((img_x_orig + right_lane_pos, 0), (img_x_orig + right_lane_pos, screen_height))
             right_lane.set_color(0, 0, 0)
             self.viewer.add_geom(right_lane)
     
@@ -127,7 +131,12 @@ class VehicleTfmEnv(gym.Env):
     def _is_done(self):
         x,y,_ = self.state
         goal_threshold = 1
+        done_time = 2
         if x >= (self.x_goal - goal_threshold) and x <= (self.x_goal + goal_threshold) and y >= (self.y_goal - goal_threshold) and y <= (self.y_goal + goal_threshold):
+            done = True
+        elif y >= self.right_lane or y <= self.left_lane:
+            done = True
+        elif self.stop_time >= done_time:
             done = True
         else:
             done = False
@@ -137,9 +146,15 @@ class VehicleTfmEnv(gym.Env):
         return self.render(close=True)
     
     def _reward(self):
+        reward_out_boundaries = -1000
         _,y,_ = self.state
+        lane_mean = self.center_lane
+        lane_std = (self.right_lane-self.left_lane)/10
+        reward = 10-(1-np.exp(-np.square(y-lane_mean)/(2*np.square(lane_std))))
         if y >= self.right_lane or y <= self.left_lane:
-            reward = -100
-        else:
-            reward = 1
+            reward = reward + reward_out_boundaries
+        # if y >= self.right_lane or y <= self.left_lane:
+        #     reward = -100
+        # else:
+        #     reward = 1
         return reward
