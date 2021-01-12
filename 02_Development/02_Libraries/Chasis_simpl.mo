@@ -8,10 +8,10 @@ block Chasis
   Modelica.Blocks.Interfaces.RealOutput theta_out annotation(
     Placement(visible = true, transformation(extent = {{60, -30}, {80, -10}}, rotation = 0), iconTransformation(extent = {{60, -30}, {80, -10}}, rotation = 0)));
   constant Real pi = 2 * Modelica.Math.asin(1.0);
-  constant Real vel = 5;
+  constant Real vel = 2;
   parameter Real lf = 0.12;
   parameter Real lr = 0.16;
-  Real theta(start = 0);
+  Real theta(start = 0*pi/180);
   Real x(start = 0);
   Real y(start = 0);
   Real delta_rad;
@@ -19,7 +19,7 @@ block Chasis
   Real vel_heading;
 equation
 //Vehicle lateral dynamic
-  delta_rad = 2 * pi / 180;
+  delta_rad = delta * pi / 180;
   beta = atan(lr * tan(delta_rad) / (lf + lr));
   der(theta) = vel * tan(delta_rad) * cos(beta) / (lf + lr);
   vel_heading = mod(beta + delta_rad,2*pi);
