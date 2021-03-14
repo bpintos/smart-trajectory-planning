@@ -28,13 +28,17 @@ class VehicleTfmEnv(gym.Env):
         self.action_space = spaces.Box(-high, high)
         
         # Observation space (normalized between -1 and 1)
-        high = np.array([1], dtype = np.float32)
-        low = np.array([-1], dtype = np.float32)
+        high = np.array([1, 1], dtype = np.float32)
+        low = np.array([-1, -1], dtype = np.float32)
         self.observation_space = spaces.Box(low, high)
         
         # X and Y coordinates of the destination
         self.x_goal = x_goal
         self.y_goal = y_goal
+        
+        # Initial position
+        self.x_initial = 0
+        self.y_initial = 0
         
         # Circuit number
         self.circuit_number = circuit_number
@@ -66,13 +70,16 @@ class VehicleTfmEnv(gym.Env):
         # Variable initialization
         self.done = False
         self.sensors = (0,0,0)
-        self.state = self.reset()
+        self.state = self.reset(0)
         self.action_old = 0
         self.viewer = None
         self.display = None
         self.veh_transform = None
+        
+        # Reward initialization variables
+        self.action_old = 0
 
-    def step(self, action):
+    def step(self, action, iteration, ep):
         # Execute one time step within the environment
         
         # Convert steering from normalized value to real value
@@ -89,7 +96,13 @@ class VehicleTfmEnv(gym.Env):
         res = self.model.simulate(start_time=self.start_time, final_time=self.stop_time, options=opts)
         
         # Get sensor measurements from the vehicle model
-        self.sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
+        res_sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
+        if ep >= 0:
+            self.y_initial = 0.2
+        self.sensors = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2])
+        
+        print("Action ->  {}".format(action))
+        print("Delta ->  {}".format(res.final('delta')))
         
         # Get the state forwarded to the agent
         self.state = self._lateralcalc()
@@ -102,9 +115,9 @@ class VehicleTfmEnv(gym.Env):
             self.start_time = self.stop_time
             self.stop_time += self.sample_time
 
-        return self.state, self._reward(action), self.done, {}
+        return self.state, self._reward(action, iteration), self.done, {}
      
-    def reset(self):
+    def reset(self, ep):
         # Reset the state of the environment to an initial state
         
         # Model reset
@@ -114,7 +127,10 @@ class VehicleTfmEnv(gym.Env):
         res = self.model.simulate(start_time=0, final_time=0)
         
         # Get sensor measurements from the vehicle model
-        self.sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
+        res_sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
+        if ep >= 0:
+            self.y_initial = 0.2
+        self.sensors = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2])
         
         # Get the state forwarded to the agent
         self.state = self._lateralcalc()
@@ -279,7 +295,7 @@ class VehicleTfmEnv(gym.Env):
         y_dest_ini, y_dest_fin = self.y_goal - area_destination, self.y_goal + area_destination
         
         # Get state
-        e_lat = self.state
+        e_lat, _ = self.state
         # Vehicle sensors
         x, y, _ = self.sensors
         
@@ -287,7 +303,7 @@ class VehicleTfmEnv(gym.Env):
         if self.circuit_number == 1:
             done_time = 30
         else:
-            done_time = 4
+            done_time = 10
         
         if abs(e_lat) > 1:
             # Vehicle exceeded road boundaries
@@ -305,26 +321,40 @@ class VehicleTfmEnv(gym.Env):
     def close(self):
         return self.render(close=True)
     
-    def _reward(self, action):
+    def _reward(self, action, iteration):
         # Calculate reward value
         
-        # action = action[0]
+        # Reward steering gradient
+        # Steering gradient calculation
+        if iteration == 0:
+            self.action_old = action
+        action_grad_max = 10
+        action = action[0]
+        action_grad = (action - self.action_old)/self.sample_time
         
-        # Get state
-        e_lat = self.state
+        # Reward gradient only applied if steering gradient exceedes maximum limit
+        if abs(action_grad) > action_grad_max:
+            reward_action_grad = max(-0.01*abs(action_grad)/action_grad_max,-0.1)
+        else:
+            reward_action_grad = 0
+                    
+        self.action_old = action
         
         # Reward due to vehicle exceeding road boundaries
-        reward_out_boundaries = -100
-        
-        # Reward if vehicle follows the center lane of the road
-        lane_std = 0.05
-        reward = np.exp(-e_lat**2/(2*lane_std**2))
+        # Get state
+        e_lat, _ = self.state
         
         # Reward out of boundaries only applied if vehicle exceedes road boundaries
         if abs(e_lat) > 1:
-            reward = reward + reward_out_boundaries
+            reward_out_boundaries = -100
+        else:
+            reward_out_boundaries = 0
         
-        return reward
+        # Reward if vehicle follows the center lane of the road
+        lane_std = 0.1
+        reward_lane = np.exp(-e_lat**2/(2*lane_std**2))
+        
+        return reward_lane + reward_out_boundaries + reward_action_grad
     
     def _lateralcalc(self):
         # Function to calculate the lateral distance from the vehicle to the center lane
@@ -360,6 +390,13 @@ class VehicleTfmEnv(gym.Env):
         _, elat = np.matmul(R,pos_ptelat)
         
         # Normalization between -1 and 1 of the lateral distance
-        elat = 2*elat/(self.lane_width)
+        elat = -2*elat/self.lane_width
         
-        return elat
+        # etheta. This formula only valid for circuit number 2
+        if theta >= 180:
+            etheta = theta - 360
+        else:
+            etheta = theta
+        etheta = -etheta/180
+        
+        return elat, etheta

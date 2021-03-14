@@ -8,7 +8,7 @@ block Chasis
   Modelica.Blocks.Interfaces.RealOutput theta_out annotation(
     Placement(visible = true, transformation(extent = {{60, -30}, {80, -10}}, rotation = 0), iconTransformation(extent = {{60, -30}, {80, -10}}, rotation = 0)));
   constant Real pi = 2 * Modelica.Math.asin(1.0);
-  constant Real vel = 2;
+  constant Real vel = 5;
   parameter Real lf = 0.12;
   parameter Real lr = 0.16;
   Real theta(start = 0*pi/180);

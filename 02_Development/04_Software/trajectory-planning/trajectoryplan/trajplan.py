@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
+import pandas as pd
 
 class OUActionNoise:
     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
@@ -31,7 +32,7 @@ class OUActionNoise:
 
 
 class Buffer:
-    def __init__(self, num_states, num_actions, buffer_capacity=100000, batch_size=64):
+    def __init__(self, num_states, num_actions, buffer_capacity=100000, batch_size=1):
         # Number of "experiences" to store at max
         self.buffer_capacity = buffer_capacity
         # Num of tuples to train on.
@@ -63,7 +64,7 @@ class Buffer:
     # Eager execution is turned on by default in TensorFlow 2. Decorating with tf.function allows
     # TensorFlow to build a static graph out of the logic and computations in our function.
     # This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
-    @tf.function
+    # @tf.function
     def update(
         self, state_batch, action_batch, reward_batch, next_state_batch, target_actor, target_critic,\
             actor_model, critic_model, actor_optimizer, critic_optimizer, gamma
@@ -116,7 +117,7 @@ class Buffer:
 
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
-@tf.function
+# @tf.function
 def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
@@ -125,11 +126,12 @@ def update_target(target_weights, weights, tau):
 def get_actor(num_states, upper_bound):
     # Initialize weights between -3e-3 and 3-e3
     last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
+    initializer = tf.keras.initializers.GlorotNormal()
 
     inputs = layers.Input(shape=(num_states,))
-    out = layers.Dense(256, activation="relu")(inputs)
-    out = layers.Dense(256, activation="relu")(out)
-    outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
+    out = layers.Dense(256, activation="relu", kernel_initializer=initializer)(inputs)
+    out = layers.Dense(256, activation="relu", kernel_initializer=initializer)(out)
+    outputs = layers.Dense(1, activation="tanh", kernel_initializer=initializer)(out)
 
     # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
@@ -160,7 +162,7 @@ def get_critic(num_states, num_actions):
     return model
 
 
-def policy(state, noise_object, actor_model, lower_bound, upper_bound):
+def policy(state, noise_object, actor_model, lower_bound, upper_bound, ep):
     sampled_actions = tf.squeeze(actor_model(state))
     noise = noise_object(sampled_actions)
     # Adding noise to action
@@ -168,5 +170,13 @@ def policy(state, noise_object, actor_model, lower_bound, upper_bound):
 
     # We make sure action is within bounds
     legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
+    
+    # if ep <= 10:
+    #     circuit = pd.read_csv('vehiclegym/envs/circuit1_delta_higher_resolution.csv')
+    #     delta = circuit['chasis.delta']
+    #     action = np.array([delta[index]/20])
+    #     action = [np.squeeze(action)]
+    # else:
+    #     action = [np.squeeze(legal_action)]
 
     return [np.squeeze(legal_action)]
