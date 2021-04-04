@@ -101,8 +101,8 @@ class VehicleTfmEnv(gym.Env):
             self.y_initial = 0.2
         self.sensors = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2])
         
-        print("Action ->  {}".format(action))
-        print("Delta ->  {}".format(res.final('delta')))
+        # print("Action ->  {}".format(action))
+        # print("Delta ->  {}".format(res.final('delta')))
         
         # Get the state forwarded to the agent
         self.state = self._lateralcalc()
@@ -334,7 +334,7 @@ class VehicleTfmEnv(gym.Env):
         
         # Reward gradient only applied if steering gradient exceedes maximum limit
         if abs(action_grad) > action_grad_max:
-            reward_action_grad = max(-0.01*abs(action_grad)/action_grad_max,-0.1)
+            reward_action_grad = 0#max(-0.01*abs(action_grad)/action_grad_max,-0.1)
         else:
             reward_action_grad = 0
                     
@@ -346,12 +346,12 @@ class VehicleTfmEnv(gym.Env):
         
         # Reward out of boundaries only applied if vehicle exceedes road boundaries
         if abs(e_lat) > 1:
-            reward_out_boundaries = -100
+            reward_out_boundaries = -1
         else:
             reward_out_boundaries = 0
         
         # Reward if vehicle follows the center lane of the road
-        lane_std = 0.1
+        lane_std = 0.2
         reward_lane = np.exp(-e_lat**2/(2*lane_std**2))
         
         return reward_lane + reward_out_boundaries + reward_action_grad

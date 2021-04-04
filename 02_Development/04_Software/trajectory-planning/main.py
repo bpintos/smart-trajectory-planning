@@ -52,7 +52,7 @@ if __name__ == "__main__":
     print("Max Value of Action ->  {}".format(upper_bound))
     print("Min Value of Action ->  {}".format(lower_bound))
     
-    std_dev = 0.01
+    std_dev = 0.1
     ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
     
     actor_model = get_actor(num_states, upper_bound)
@@ -67,14 +67,15 @@ if __name__ == "__main__":
     
     # Learning rate for actor-critic models
     critic_lr = 0.002
-    actor_lr = 0.001
+    actor_lr = 0.0001
+    
     
     critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
     actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
     
-    total_episodes = 1000
+    total_episodes = 100
     # Discount factor for future rewards
-    gamma = 0.99
+    gamma = 0.9
     # Used to update target networks 
     tau = 0.05
     
