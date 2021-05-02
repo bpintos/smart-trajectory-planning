@@ -1,7 +1,16 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
-import pandas as pd
+# import pandas as pd
+
+class WhiteActionNoise:
+    def __init__(self, mean, std_deviation):
+        self.mean = mean
+        self.std_dev = std_deviation
+
+    def __call__(self, sampled_actions):
+        x = np.random.normal(self.mean, self.std_dev)
+        return x
 
 class OUActionNoise:
     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
@@ -64,7 +73,7 @@ class Buffer:
     # Eager execution is turned on by default in TensorFlow 2. Decorating with tf.function allows
     # TensorFlow to build a static graph out of the logic and computations in our function.
     # This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
-    # @tf.function
+    @tf.function
     def update(
         self, state_batch, action_batch, reward_batch, next_state_batch, target_actor, target_critic,\
             actor_model, critic_model, actor_optimizer, critic_optimizer, gamma
@@ -117,7 +126,7 @@ class Buffer:
 
 # This update target parameters slowly
 # Based on rate `tau`, which is much less than one.
-# @tf.function
+@tf.function
 def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
@@ -166,10 +175,10 @@ def policy(state, noise_object, actor_model, lower_bound, upper_bound, ep):
     sampled_actions = tf.squeeze(actor_model(state))
     noise = noise_object(sampled_actions)
     # Adding noise to action
-    sampled_actions = sampled_actions.numpy() + noise
+    sampled_actions_noise = sampled_actions.numpy() + noise
 
     # We make sure action is within bounds
-    legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
+    legal_action = np.clip(sampled_actions_noise, lower_bound, upper_bound)
     
     # if ep <= 10:
     #     circuit = pd.read_csv('vehiclegym/envs/circuit1_delta_higher_resolution.csv')
@@ -179,4 +188,4 @@ def policy(state, noise_object, actor_model, lower_bound, upper_bound, ep):
     # else:
     #     action = [np.squeeze(legal_action)]
 
-    return [np.squeeze(legal_action)]
+    return [np.squeeze(legal_action)], [np.squeeze(sampled_actions)], [np.squeeze(noise)]

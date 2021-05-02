@@ -15,7 +15,7 @@ import pandas as pd
 class VehicleTfmEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
-    def __init__(self, x_goal, y_goal, circuit_number):
+    def __init__(self, x_goal, y_goal, circuit_number, obs = False):
         super(VehicleTfmEnv, self).__init__()
         # Define action and observation space
         # They must be gym.spaces objects
@@ -28,8 +28,8 @@ class VehicleTfmEnv(gym.Env):
         self.action_space = spaces.Box(-high, high)
         
         # Observation space (normalized between -1 and 1)
-        high = np.array([1, 1], dtype = np.float32)
-        low = np.array([-1, -1], dtype = np.float32)
+        high = np.array([1, 1], dtype = np.float32) #[1, 1, 1]
+        low = np.array([-1, -1], dtype = np.float32) #[-1, -1, 0]
         self.observation_space = spaces.Box(low, high)
         
         # X and Y coordinates of the destination
@@ -42,6 +42,7 @@ class VehicleTfmEnv(gym.Env):
         
         # Circuit number
         self.circuit_number = circuit_number
+        self.obs = obs
         
         # Load vehicle model
         model_path = '../../02_Libraries/Chasis_simpl.fmu'
@@ -50,17 +51,27 @@ class VehicleTfmEnv(gym.Env):
         # Load circuit specifications
         if self.circuit_number == 1:
             self.circuit = pd.read_csv('vehiclegym/envs/circuit1.csv')
+            self.lane_width = 1
+            self.x_obs = 10
+            self.y_obs = 0
+            self.obs_radius = 0.3
+            self.obs_transform = None
         elif self.circuit_number == 2:
             self.circuit = pd.read_csv('vehiclegym/envs/circuit2.csv')
+            self.lane_width = 2
+            self.x_obs = 10
+            self.y_obs = 0
+            self.obs_radius = 0.3
+            self.obs_transform = None
         else:
             self.circuit = None
+            self.lane_width = 1
+        
         # Center lane of the selected circuit
         self.lane_center = [np.array(self.circuit['chasis.x']),\
                             np.array(self.circuit['chasis.y']),\
                             np.array(self.circuit['chasis.theta_out'])]
-        # Circuit's lane width
-        self.lane_width = 1
-        
+
         # Simulation sample time
         self.sample_time = 0.01
         # Initialization of simulation start and stop times
@@ -167,9 +178,6 @@ class VehicleTfmEnv(gym.Env):
             veh_width = 0.2
             veh_height = 0.4
             
-            # Circuit lane's width
-            self.lane_width = 1
-            
         elif self.circuit_number == 2:
             # Screen size
             screen_width = 2000
@@ -185,9 +193,6 @@ class VehicleTfmEnv(gym.Env):
             veh_width = 0.2
             veh_height = 0.4
             
-            # Circuit lane's width
-            self.lane_width = 1
-            
         else:
             # Screen size
             screen_width = 1200
@@ -202,9 +207,6 @@ class VehicleTfmEnv(gym.Env):
             # Vehicle size
             veh_width = 0.2
             veh_height = 0.4
-            
-            # Circuit lane's width
-            self.lane_width = 1
         
         # X coordinate of the circuit's center lane
         lane_center_x = self.lane_center[0]
@@ -217,6 +219,7 @@ class VehicleTfmEnv(gym.Env):
         veh_width = veh_width*m2pixel
         veh_height = veh_height*m2pixel
         lane_width = self.lane_width*m2pixel
+        obs_radius = self.obs_radius*m2pixel
         
         # Render circuit
         if self.viewer is None:
@@ -224,7 +227,7 @@ class VehicleTfmEnv(gym.Env):
             self.viewer = rendering.Viewer(screen_width, screen_height, display=self.display)
             
             # Add vehicle
-            l, r, t, b = -veh_height / 2, veh_height / 2, veh_width / 2, -veh_width / 2
+            l, r, t, b = -veh_height/2, veh_height/2, veh_width/2, -veh_width/2
             vehicle = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
             vehicle.set_color(0, 0, 255)
             
@@ -235,6 +238,17 @@ class VehicleTfmEnv(gym.Env):
             self.veh_transform = rendering.Transform(translation=(tras_x, tras_y), rotation=theta_ini*np.pi/180)
             vehicle.add_attr(self.veh_transform)
             self.viewer.add_geom(vehicle)
+            
+            # Add obstacle
+            if self.obs == True:
+                if self.circuit_number == 2:
+                    obstacle = rendering.make_circle(obs_radius)
+                    obstacle.set_color(0, 0, 0)
+                    x_obs = x_track_ini + self.x_obs*m2pixel
+                    y_obs = y_track_ini + self.y_obs*m2pixel
+                    self.obs_transform = rendering.Transform(translation=(x_obs, y_obs), rotation=0)
+                    obstacle.add_attr(self.obs_transform)
+                    self.viewer.add_geom(obstacle)
 
             # Add left and right road lanes
             x_left_rel, y_left_rel = 0, lane_width/2
@@ -299,6 +313,9 @@ class VehicleTfmEnv(gym.Env):
         # Vehicle sensors
         x, y, _ = self.sensors
         
+        # Distance to obstacle
+        dist_obs = np.sqrt((self.x_obs-x)**2 + (self.y_obs-y)**2)
+        
         # Set maximum simulation time depending on the selected circuit
         if self.circuit_number == 1:
             done_time = 30
@@ -316,6 +333,11 @@ class VehicleTfmEnv(gym.Env):
             done = True
         else:
             done = False
+        
+        if self.obs == True:
+            if dist_obs <= self.obs_radius:
+                done = True
+        
         return done
     
     def close(self):
@@ -349,12 +371,33 @@ class VehicleTfmEnv(gym.Env):
             reward_out_boundaries = -1
         else:
             reward_out_boundaries = 0
+            
+        # Reward obstacles
+        # Get sensors
+        x, y, _ = self.sensors
+        lad_obs = 0.6
+        dist_obs = np.sqrt((self.x_obs - x)**2 + (self.y_obs - y)**2)
+        dist_obs = min(dist_obs, lad_obs)
+        dist_obs = max(dist_obs, -lad_obs)
+        # Normalize distance to obstacle between 0 and 1
+        dist_obs = abs(dist_obs)/lad_obs
+        dist_obs = 1 - dist_obs
+        
+        if self.obs == True:
+            if dist_obs > 0:
+                reward_obs = -10*dist_obs
+            else:
+                reward_obs = 0
+        else:
+            reward_obs = 0
         
         # Reward if vehicle follows the center lane of the road
         lane_std = 0.2
         reward_lane = np.exp(-e_lat**2/(2*lane_std**2))
         
-        return reward_lane + reward_out_boundaries + reward_action_grad
+        print("reward_obs ->  {}".format(reward_obs))
+        
+        return reward_lane + reward_out_boundaries + reward_action_grad + reward_obs
     
     def _lateralcalc(self):
         # Function to calculate the lateral distance from the vehicle to the center lane
@@ -399,4 +442,14 @@ class VehicleTfmEnv(gym.Env):
             etheta = theta
         etheta = -etheta/180
         
-        return elat, etheta
+        # Longitudinal distance to obstacle
+        lad_obs = 5
+        x_obs = self.x_obs - x
+        x_obs = min(x_obs, lad_obs)
+        x_obs = max(x_obs, -lad_obs)
+        
+        # Normalize longitudinal distance to obstacle between 0 and 1
+        x_obs = abs(x_obs)/lad_obs
+        x_obs = 1 - x_obs
+        
+        return elat, etheta #, x_obs

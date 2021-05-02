@@ -9,7 +9,7 @@ import vehiclegym
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from trajectoryplan.trajplan import policy,OUActionNoise,get_actor,get_critic,Buffer,update_target
+from trajectoryplan.trajplan import policy,OUActionNoise,WhiteActionNoise,get_actor,get_critic,Buffer,update_target
 
 np.random.seed(7)
 tf.random.set_seed(7)
@@ -17,9 +17,10 @@ tf.random.set_seed(7)
 if __name__ == "__main__":
     env_name = 'VehicleTfm-v0'
     config = {
-        'x_goal': 19,
+        'x_goal': -1,
         'y_goal': 0,
-        'circuit_number': 2
+        'circuit_number': 1,
+        'obs': False
     }
     
     # goal circuit 1: x = -1, y = 0
@@ -53,7 +54,9 @@ if __name__ == "__main__":
     print("Min Value of Action ->  {}".format(lower_bound))
     
     std_dev = 0.1
-    ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
+    # noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
+    noise = WhiteActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
+    
     
     actor_model = get_actor(num_states, upper_bound)
     critic_model = get_critic(num_states, num_actions)
@@ -66,7 +69,7 @@ if __name__ == "__main__":
     target_critic.set_weights(critic_model.get_weights())
     
     # Learning rate for actor-critic models
-    critic_lr = 0.002
+    critic_lr = 0.002 #0.0002
     actor_lr = 0.0001
     
     
@@ -75,11 +78,11 @@ if __name__ == "__main__":
     
     total_episodes = 100
     # Discount factor for future rewards
-    gamma = 0.9
+    gamma = 0.9 #0.99
     # Used to update target networks 
-    tau = 0.05
+    tau = 0.05 #0.02
     
-    buffer = Buffer(num_states, num_actions, 50000, 64)
+    buffer = Buffer(num_states, num_actions, 50000, 64) #5000
     
     # To store reward history of each episode
     ep_reward_list = []
@@ -92,14 +95,18 @@ if __name__ == "__main__":
         episodic_reward = 0
         e_lat_record = np.empty(0)
         e_theta_record = np.empty(0)
-        steer_record = np.empty(0) 
+        steer_record = np.empty(0)
+        steer_raw_record = np.empty(0) 
+        steer_noise_record = np.empty(0) 
         reward_record = np.empty(0)
+        x_obs_record = np.empty(0)
         
         fig = plt.figure(figsize=(12, 15))
-        ax1 = fig.add_subplot(411)
-        ax2 = fig.add_subplot(412)
-        ax3 = fig.add_subplot(413)
-        ax4 = fig.add_subplot(414)
+        ax1 = fig.add_subplot(511)
+        ax2 = fig.add_subplot(512)
+        ax3 = fig.add_subplot(513)
+        ax4 = fig.add_subplot(514)
+        ax5 = fig.add_subplot(515)
         
         iteration = 0
         
@@ -110,7 +117,7 @@ if __name__ == "__main__":
             
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
             
-            action = policy(tf_prev_state, ou_noise, actor_model, lower_bound, upper_bound, ep)
+            action, action_raw, action_noise = policy(tf_prev_state, noise, actor_model, lower_bound, upper_bound, ep)
             # Recieve state and reward from environment.
             state, reward, done, info = env.step(action, iteration, ep)
             print("Reward ->  {}".format(reward))
@@ -136,7 +143,10 @@ if __name__ == "__main__":
             
             e_lat_record = np.append(e_lat_record, state[0])
             e_theta_record = np.append(e_theta_record, state[1])
+            x_obs_record = np.append(x_obs_record, 0) #state[2]
             steer_record = np.append(steer_record, action)
+            steer_raw_record = np.append(steer_raw_record, action_raw)
+            steer_noise_record = np.append(steer_noise_record, action_noise)
             reward_record = np.append(reward_record, reward)
         
         ep_reward_list.append(episodic_reward)
@@ -149,10 +159,14 @@ if __name__ == "__main__":
         ax1.set_title("elat")
         ax2.plot(e_theta_record)
         ax2.set_title("etheta")
-        ax3.plot(steer_record)
-        ax3.set_title("delta")
-        ax4.set_title("Episode * {} * Episodic Reward is ==> {}".format(ep, episodic_reward))
-        ax4.plot(reward_record)
+        ax3.plot(x_obs_record)
+        ax3.set_title("xobs")
+        ax4.plot(steer_record, 'b')
+        ax4.plot(steer_raw_record, 'r')
+        ax4.plot(steer_noise_record, 'g')
+        ax4.set_title("delta")
+        ax5.set_title("Episode * {} * Episodic Reward is ==> {}".format(ep, episodic_reward))
+        ax5.plot(reward_record)
         plt.show()
         
     # Plotting graph
