@@ -189,3 +189,123 @@ def policy(state, noise_object, actor_model, lower_bound, upper_bound, ep):
     #     action = [np.squeeze(legal_action)]
 
     return [np.squeeze(legal_action)], [np.squeeze(sampled_actions)], [np.squeeze(noise)]
+
+def DiscretizeState(state):
+    e_lat = state[0]
+    e_theta = state[1]
+    # Discretize lateral distance
+    # if e_lat <= -1:
+    #     e_lat_discrete = -1
+    # elif e_lat > -1 and e_lat <= -0.6:
+    #     e_lat_discrete = -0.8
+    # elif e_lat > -0.6 and e_lat <= -0.2:
+    #     e_lat_discrete = -0.4
+    # elif e_lat > -0.2 and e_lat < 0.2:
+    #     e_lat_discrete = 0
+    # elif e_lat >= 0.2 and e_lat < 0.6:
+    #     e_lat_discrete = 0.4
+    # elif e_lat >= 0.6 and e_lat < 1:
+    #     e_lat_discrete = 0.8
+    # elif e_lat >= 1:
+    #     e_lat_discrete = 1
+    if e_lat > 0:
+        e_lat_discrete = 0.5
+    else:
+        e_lat_discrete = -0.5
+    
+    # Discretize vehicle heading
+    # if e_theta >= -0.55 and e_theta <= -0.45:
+    #     e_theta_discrete = -0.5
+    # elif e_theta > -0.45 and e_theta <= -0.35:
+    #     e_theta_discrete = -0.4
+    # elif e_theta > -0.35 and e_theta <= -0.25:
+    #     e_theta_discrete = -0.3
+    # elif e_theta > -0.25 and e_theta <= -0.15:
+    #     e_theta_discrete = -0.2
+    # elif e_theta > -0.15 and e_theta <= -0.05:
+    #     e_theta_discrete = -0.1
+    # elif e_theta > -0.05 and e_theta < 0.05:
+    #     e_theta_discrete = 0
+    # elif e_theta >= 0.05 and e_theta < 0.15:
+    #     e_theta_discrete = 0.1
+    # elif e_theta >= 0.15 and e_theta < 0.25:
+    #     e_theta_discrete = 0.2
+    # elif e_theta >= 0.25 and e_theta < 0.35:
+    #     e_theta_discrete = 0.3
+    # elif e_theta >= 0.35 and e_theta < 0.45:
+    #     e_theta_discrete = 0.4
+    # elif e_theta >= 0.45 and e_theta <= 0.55:
+    #     e_theta_discrete = 0.5
+    
+    e_theta_discrete = 0
+        
+    return e_lat_discrete, e_theta_discrete
+
+def getQvalue(q_table, state, action):
+    state_axis = q_table[0]
+    index_state = state_axis.index(state)
+    action_axis = q_table[1]
+    index_action = action_axis.index(action)
+    q_values = q_table[2]
+    q_value = q_values[index_state, index_action]
+    return q_value
+
+def initQtable():
+    actions = (0, 1, 2)
+    e_lat_values = (-2, -1, 0, 1, 2)
+    long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+    states = []
+    for e_lat_value in e_lat_values:
+        for long_dist_value in long_dist_values:
+            states.append((e_lat_value,long_dist_value))
+    states = tuple(states)
+    # states = tuple(e_lat_values)
+    table = np.zeros((len(states),len(actions)))
+    #table = np.random.rand(len(states),len(actions))
+    return states, actions, table
+
+def initQtable_diff():
+    actions = (0, 1, 2)
+    e_lat_values = (-2, -1, 0, 1, 2)
+    long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+    theta_values = (0, 90)
+    states = []
+    for e_lat_value in e_lat_values:
+        for long_dist_value in long_dist_values:
+            states.append((e_lat_value,long_dist_value))
+    states = tuple(states)
+    # states = tuple(e_lat_values)
+    table = np.zeros((len(states),len(actions)))
+    #table = np.random.rand(len(states),len(actions))
+    return states, actions, table
+
+def getAction(q_table, state):
+    state_axis = q_table[0]
+    action_axis = q_table[1]
+    q_values = q_table[2]
+    index_state = state_axis.index(state)
+    q_values_state = q_values[index_state,:]
+    action_index = np.argmax(q_values_state)
+    action = action_axis[action_index]
+    return action
+
+def updateQtable(q_table, state, action, q_value_new):
+    state_axis = q_table[0]
+    index_state = state_axis.index(state)
+    action_axis = q_table[1]
+    index_action = action_axis.index(action)
+    q_values = q_table[2]
+    q_values[index_state, index_action] = q_value_new
+    return state_axis, action_axis, q_values
+
+# np.random.seed(7)
+# tf.random.set_seed(7)
+
+
+# table = initQtable()
+
+# state = (-1, -0.4)
+# action = -5
+# value = getQvalue(table, state, action)
+# best_action = getAction(table, state)
+# value_best = getQvalue(table, state, best_action)

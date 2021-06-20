@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Dec 21 12:36:31 2020
-
-@author: bpintos
+@author: Borja Pintos
 """
 
 import gym
 from gym import spaces
 import numpy as np
-from pyfmi import load_fmu
-import time
 import pandas as pd
 
 class VehicleTfmEnv(gym.Env):
@@ -20,34 +16,29 @@ class VehicleTfmEnv(gym.Env):
         # Define action and observation space
         # They must be gym.spaces objects
         
-        # Maximum steering position
-        self.max_steering = 20
+        # Action space
+        self.action_space = spaces.Discrete(3)
         
-        # Action space (normalized between -1 and 1)
-        high = np.array([1], dtype = np.float32)
-        self.action_space = spaces.Box(-high, high)
+        # Observation space
+        self.observation_space = spaces.Tuple((
+        spaces.Discrete(5),
+        spaces.Discrete(20)))
         
-        # Observation space (normalized between -1 and 1)
-        high = np.array([1, 1], dtype = np.float32) #[1, 1, 1]
-        low = np.array([-1, -1], dtype = np.float32) #[-1, -1, 0]
-        self.observation_space = spaces.Box(low, high)
-        
-        # X and Y coordinates of the destination
+        # X and Y coordinates of the final destination
         self.x_goal = x_goal
-        self.y_goal = y_goal
         self.destination_reached = False
         
         # Initial position
         self.x_initial = 0
-        self.y_initial = 0.2
+        self.y_initial = 0
+        
+        # Vehicle velocity
+        self.velocity = 1
         
         # Circuit number
         self.circuit_number = circuit_number
         self.obs = obs
-        
-        # Load vehicle model
-        model_path = '../../02_Libraries/Chasis_simpl.fmu'
-        self.model = load_fmu(model_path)
+        self.obstacles = [(0,3),(1,3),(2,3),(-2,7),(-1,7),(0,7),(0,11),(1,11),(2,11),(-2,15),(-1,15),(0,15),(0,18),(1,18),(2,18)]
         
         # Load circuit specifications
         if self.circuit_number == 1:
@@ -67,55 +58,43 @@ class VehicleTfmEnv(gym.Env):
         else:
             self.circuit = None
             self.lane_width = 1
-        
-        # Center lane of the selected circuit
-        self.lane_center = [np.array(self.circuit['chasis.x']),\
-                            np.array(self.circuit['chasis.y']),\
-                            np.array(self.circuit['chasis.theta_out'])]
 
-        # Simulation sample time
-        self.sample_time = 0.01
-        # Initialization of simulation start and stop times
+        # Simulation sample time and simulation start and stop times
+        self.sample_time = 1
         self.start_time = 0
         self.stop_time = self.sample_time
         
         # Variable initialization
         self.done = False
-        self.sensors = (0,0,0)
         self.state = self.reset()
-        self.action_old = 0
         self.viewer = None
         self.display = None
         self.veh_transform = None
-        
-        # Reward initialization variables
-        self.action_old = 0
 
-    def step(self, action, iteration):
+    def step(self, action):
         # Execute one time step within the environment
         
-        # Convert steering from normalized value to real value
-        action = action[0]*self.max_steering
-        action = [np.array(action)]
-        self.model.set(list(['delta']), list(action))
+        # Action = 0 -> Move up
+        # Action = 1 -> Keep lateral position
+        # Action = 2 -> Move down
+        if action[0] == 0:
+            sens = list(self.sensors)
+            sens[1] = sens[1] - 1
+            sens = tuple(sens)
+            self.sensors = sens
+        elif action[0] == 2:
+            sens = list(self.sensors)
+            sens[1] = sens[1] + 1
+            sens = tuple(sens)
+            self.sensors = sens
         
-        # Simulation options
-        opts = self.model.simulate_options()
-        opts['ncp'] = 10
-        opts['initialize'] = False
-        
-        # Run the simulation one sample time
-        res = self.model.simulate(start_time=self.start_time, final_time=self.stop_time, options=opts)
-        
-        # Get sensor measurements from the vehicle model
-        res_sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
-        self.sensors = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2])
-        
-        # print("Action ->  {}".format(action))
-        # print("Delta ->  {}".format(res.final('delta')))
+        sens = list(self.sensors)
+        sens[0] = sens[0] + self.velocity*self.sample_time
+        sens = tuple(sens)
+        self.sensors = sens
         
         # Get the state forwarded to the agent
-        self.state = self._lateralcalc()
+        self.state = (self.sensors[1], self.sensors[0])
         
         # Check if environment is terminated
         self.done = self._is_done()
@@ -125,24 +104,18 @@ class VehicleTfmEnv(gym.Env):
             self.start_time = self.stop_time
             self.stop_time += self.sample_time
 
-        return self.state, self._reward(action, iteration), self.done, self.sensors
+        return self.state, self._reward(action), self.done, self.sensors
      
     def reset(self):
         # Reset the state of the environment to an initial state
         
-        # Model reset
-        self.model.reset()
         self.destination_reached = False
         
         # Reset the model to initial state
-        res = self.model.simulate(start_time=0, final_time=0)
-        
-        # Get sensor measurements from the vehicle model
-        res_sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
-        self.sensors = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2])
+        self.sensors = (self.x_initial, self.y_initial, 0)
         
         # Get the state forwarded to the agent
-        self.state = self._lateralcalc()
+        self.state = (self.sensors[1], 0)
         
         # Reset simulation start and stop times
         self.start_time = 0
@@ -207,11 +180,11 @@ class VehicleTfmEnv(gym.Env):
             veh_height = 0.4
         
         # X coordinate of the circuit's center lane
-        lane_center_x = self.lane_center[0]
+        lane_center_x = np.array(self.circuit['chasis.x'])
         # Y coordinate of the circuit's center lane
-        lane_center_y = self.lane_center[1]
+        lane_center_y = np.array(self.circuit['chasis.y'])
         # Heading of the circuit's center lane
-        lane_center_theta = self.lane_center[2]
+        lane_center_theta = np.array(self.circuit['chasis.theta_out'])
         
         # Convertion from meter to pixel
         veh_width = veh_width*m2pixel
@@ -301,13 +274,8 @@ class VehicleTfmEnv(gym.Env):
     def _is_done(self):
         # Check if environment is terminated
         
-        # Area of the final destination
-        area_destination = 0.5
-        x_dest_ini, x_dest_fin = self.x_goal - area_destination, self.x_goal + area_destination
-        y_dest_ini, y_dest_fin = self.y_goal - area_destination, self.y_goal + area_destination
-        
         # Get state
-        e_lat, e_theta = self.state
+        e_lat, long_dist = self.state
         # Vehicle sensors
         x, y, _ = self.sensors
         
@@ -316,24 +284,26 @@ class VehicleTfmEnv(gym.Env):
         
         # Set maximum simulation time depending on the selected circuit
         if self.circuit_number == 1:
-            done_time = 30
+            done_time = 50
         else:
-            done_time = 10
+            done_time = 50
         
-        if abs(e_lat) > 1:
+        if e_lat == -2 or e_lat == 2:
             # Vehicle exceeded road boundaries
             done = True
         elif self.stop_time >= done_time:
             # Simulation exceeded maximum simulation time
             done = True
-        elif x >= x_dest_ini: # and x <= x_dest_fin and y >= y_dest_ini and y <= y_dest_fin:
+        elif long_dist >= self.x_goal:
             # Vehicle reached final destination
             done = True
             self.destination_reached = True
-        elif self.circuit_number == 2 and x < -0.01:
+        elif self.circuit_number == 2 and x < 0:
             # Vehicle out of circuit
             done = True
         elif self.obs == True and dist_obs <= self.obs_radius:
+            done = True
+        elif (e_lat, long_dist) in self.obstacles:
             done = True
         else:
             done = False
@@ -343,119 +313,37 @@ class VehicleTfmEnv(gym.Env):
     def close(self):
         return self.render(close=True)
     
-    def _reward(self, action, iteration):
+    def _reward(self, action):
         # Calculate reward value
-        
-        # Reward steering gradient
-        # Steering gradient calculation
-        if iteration == 0:
-            self.action_old = action
-        action_grad_max = 10
-        action = action[0]
-        action_grad = (action - self.action_old)/self.sample_time
-        
-        # Reward gradient only applied if steering gradient exceedes maximum limit
-        if abs(action_grad) > action_grad_max:
-            reward_action_grad = 0#max(-0.01*abs(action_grad)/action_grad_max,-0.1)
-        else:
-            reward_action_grad = 0
-                    
-        self.action_old = action
         
         # Reward due to vehicle exceeding road boundaries
         # Get state
-        e_lat, _ = self.state
+        e_lat, long_dist = self.state
         
         # Reward out of boundaries only applied if vehicle exceedes road boundaries
-        if abs(e_lat) > 1:
+        if e_lat == -2 or e_lat == 2:
             reward_out_boundaries = -1
         else:
             reward_out_boundaries = 0
             
         # Reward obstacles
-        # Get sensors
-        x, y, _ = self.sensors
-        lad_obs = 0.6
-        dist_obs = np.sqrt((self.x_obs - x)**2 + (self.y_obs - y)**2)
-        dist_obs = min(dist_obs, lad_obs)
-        dist_obs = max(dist_obs, -lad_obs)
-        # Normalize distance to obstacle between 0 and 1
-        dist_obs = abs(dist_obs)/lad_obs
-        dist_obs = 1 - dist_obs
-        
-        if self.obs == True:
-            if dist_obs > 0:
-                reward_obs = -10*dist_obs
-            else:
-                reward_obs = 0
+        if (e_lat, long_dist) in self.obstacles:
+            reward_obs = -1
         else:
             reward_obs = 0
         
         # Reward if vehicle follows the center lane of the road
-        lane_std = 0.2
-        reward_lane = np.exp(-e_lat**2/(2*lane_std**2)) - 1
-        
+        if e_lat == 0:
+            reward_lane = 0
+        elif e_lat == -1 or e_lat == 1:
+            reward_lane = 0
+        else:
+            reward_lane = 0
+            
         # Reward if destination reached
         if self.destination_reached == True:
             reward_destination = 1
         else:
             reward_destination = 0
         
-        print("reward_obs ->  {}".format(reward_obs))
-        
-        return reward_lane + reward_out_boundaries + reward_action_grad + reward_obs + reward_destination
-    
-    def _lateralcalc(self):
-        # Function to calculate the lateral distance from the vehicle to the center lane
-        # The lateral distance is the minumum distance from the vehicle to the center lane
-        
-        # Get vehicle sensor information
-        x,y,theta = self.sensors
-        
-        # Get coordinates of center lane
-        lane_center_x = self.lane_center[0]
-        lane_center_y = self.lane_center[1]
-        
-        # Calculate distance from vehicle position to each point of the center lane
-        dist = np.sqrt((x-lane_center_x)**2+(y-lane_center_y)**2)
-        # Sort the distances
-        distarg = np.argsort(dist)
-        # Take the index from the minimum distance
-        pt1_idx = np.min((distarg[0], distarg[1]))
-        pt2_idx = np.max((distarg[0], distarg[1]))
-        
-        # More accurate calculation of the lateral distance
-        pt1 = [lane_center_x[pt1_idx], lane_center_y[pt1_idx]]
-        pt2 = [lane_center_x[pt2_idx], lane_center_y[pt2_idx]]
-        pt2_pt1 = [pt2[0] - pt1[0], pt2[1] - pt1[1]]
-        pt2_pt1_ag = np.arctan2(pt2_pt1[1], pt2_pt1[0])
-        pos_pt1 = [x - pt1[0], y - pt1[1]]
-        pos_pt1_proj = (pt2_pt1[0]*pos_pt1[0] + pt2_pt1[1]*pos_pt1[1])/np.sqrt(pt2_pt1[0]**2+pt2_pt1[1]**2)
-        ptelat = [pt1[0] + pos_pt1_proj*np.cos(pt2_pt1_ag), 
-                   pt1[1] + pos_pt1_proj*np.sin(pt2_pt1_ag)]
-        pos_ptelat = [x - ptelat[0], y - ptelat[1]]
-        c, s = np.cos(-pt2_pt1_ag), np.sin(-pt2_pt1_ag)
-        R = np.array(((c, -s), (s, c)))
-        _, elat = np.matmul(R,pos_ptelat)
-        
-        # Normalization between -1 and 1 of the lateral distance
-        elat = -2*elat/self.lane_width
-        
-        # etheta. This formula only valid for circuit number 2
-        if theta >= 180:
-            etheta = theta - 360
-        else:
-            etheta = theta
-        etheta = -etheta/180
-        
-        # Longitudinal distance to obstacle
-        lad_obs = 5
-        x_obs = self.x_obs - x
-        x_obs = min(x_obs, lad_obs)
-        x_obs = max(x_obs, -lad_obs)
-        
-        # Normalize longitudinal distance to obstacle between 0 and 1
-        x_obs = abs(x_obs)/lad_obs
-        x_obs = 1 - x_obs
-        
-        return elat, etheta #, x_obs
+        return reward_lane + reward_out_boundaries + reward_obs + reward_destination
