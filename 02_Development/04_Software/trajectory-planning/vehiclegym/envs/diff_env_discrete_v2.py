@@ -23,7 +23,10 @@ class VehicleTfmEnv(gym.Env):
         self.observation_space = spaces.Tuple((
         spaces.Discrete(5),
         spaces.Discrete(20),
-        spaces.Discrete(4)))
+        spaces.Discrete(4),
+        spaces.Discrete(5),
+        spaces.Discrete(3)
+        ))
         
         # X and Y coordinates of the final destination
         self.x_goal = x_goal
@@ -33,13 +36,17 @@ class VehicleTfmEnv(gym.Env):
         self.x_initial = 0
         self.y_initial = 0
         self.theta_initial = 0
+        self.long_dist_old = self.x_initial
         
         # Robot velocity
         self.velocity = 0
         
         # Circuit number
         self.circuit_number = circuit_number
-        self.obs = obs
+        if obs:
+            self.obstacles = [(0,3)]
+        else:
+            self.obstacles = []
         
         # Load circuit specifications
         if self.circuit_number == 1:
@@ -67,7 +74,7 @@ class VehicleTfmEnv(gym.Env):
         
         # Variable initialization
         self.done = False
-        self.state = self.reset()
+        self.state = self.reset(0)
         self.viewer = None
         self.display = None
         self.robot_transform = None
@@ -83,8 +90,8 @@ class VehicleTfmEnv(gym.Env):
             self.velocity = 0
             sens = list(self.sensors)
             sens[2] = sens[2] - 90
-            if sens[2] == -270:
-                sens[2] = 90
+            if sens[2] == -180:
+                sens[2] = 180
             sens = tuple(sens)
             self.sensors = sens
         elif action[0] == 1:
@@ -107,10 +114,27 @@ class VehicleTfmEnv(gym.Env):
         sens = tuple(sens)
         self.sensors = sens
         
-        # State = (lateral_error, longitudinal_distance)
+        # Perception system for obstacle detection
+        x, y, _ = self.sensors
+        lad = 4
+        obs_found = False
+        for i in range(x+1, x+lad+1):
+            if obs_found:
+                break
+            for j in range (-1,2):
+                if (j,i) in self.obstacles:
+                    obs_long = i-x
+                    obs_lat = j
+                    obs_found = True
+                    break
+                else:
+                    obs_long = 0
+                    obs_lat = 0
+        
+        # State = (lateral_error, longitudinal_distance, robot's heading)
         # For the straigth lane use case, the lateral error matches the y coordinate
         # and the longitudinal distance matches the x coordinate
-        self.state = (self.sensors[1], self.sensors[0])
+        self.state = (self.sensors[1], self.sensors[0], self.sensors[2], obs_long, obs_lat)
         
         # Check if environment is terminated
         self.done = self._is_done()
@@ -122,10 +146,22 @@ class VehicleTfmEnv(gym.Env):
 
         return self.state, self._reward(action), self.done, self.sensors
      
-    def reset(self):
+    def reset(self, ep):
         # Reset the state of the environment to an initial state
         
         self.destination_reached = False
+        if ep < 250:
+            self.x_initial = 12
+            self.long_dist_old = 12
+        elif ep < 500:
+            self.x_initial = 8
+            self.long_dist_old = 8
+        elif ep < 750:
+            self.x_initial = 4
+            self.long_dist_old = 4
+        else:
+            self.x_initial = 0
+            self.long_dist_old = 0
         
         # Reset the model to initial state
         self.sensors = (self.x_initial, self.y_initial, self.theta_initial)
@@ -133,7 +169,7 @@ class VehicleTfmEnv(gym.Env):
         # State = (lateral_error, longitudinal_distance)
         # For the straigth lane use case, the lateral error matches the y coordinate
         # and the longitudinal distance matches the x coordinate
-        self.state = (self.sensors[1], self.sensors[0])
+        self.state = (self.sensors[1], self.sensors[0], self.sensors[2], 0, 0)
         
         # Reset simulation start and stop times
         self.start_time = 0
@@ -229,15 +265,15 @@ class VehicleTfmEnv(gym.Env):
             self.viewer.add_geom(robot)
             
             # Add obstacle
-            if self.obs == True:
-                if self.circuit_number == 2:
-                    obstacle = rendering.make_circle(obs_radius)
-                    obstacle.set_color(0, 0, 0)
-                    x_obs = x_track_ini + self.x_obs*m2pixel
-                    y_obs = y_track_ini + self.y_obs*m2pixel
-                    self.obs_transform = rendering.Transform(translation=(x_obs, y_obs), rotation=0)
-                    obstacle.add_attr(self.obs_transform)
-                    self.viewer.add_geom(obstacle)
+            # if self.obs == True:
+            #     if self.circuit_number == 2:
+            #         obstacle = rendering.make_circle(obs_radius)
+            #         obstacle.set_color(0, 0, 0)
+            #         x_obs = x_track_ini + self.x_obs*m2pixel
+            #         y_obs = y_track_ini + self.y_obs*m2pixel
+            #         self.obs_transform = rendering.Transform(translation=(x_obs, y_obs), rotation=0)
+            #         obstacle.add_attr(self.obs_transform)
+            #         self.viewer.add_geom(obstacle)
 
             # Add left and right road lanes
             x_left_rel, y_left_rel = 0, lane_width/2
@@ -297,10 +333,7 @@ class VehicleTfmEnv(gym.Env):
         # State = (lateral_error, longitudinal_distance)
         # For the straigth lane use case, the lateral error matches the y coordinate
         # and the longitudinal distance matches the x coordinate
-        e_lat, long_dist = self.state
-        
-        # Get robot sensors
-        x, y, _ = self.sensors
+        e_lat, long_dist, _, _, _ = self.state
                
         # Check if environment is terminated
         if e_lat == -2 or e_lat == 2:
@@ -310,8 +343,10 @@ class VehicleTfmEnv(gym.Env):
             # Robot reached final destination
             done = True
             self.destination_reached = True
-        elif self.circuit_number == 2 and x < 0:
+        elif self.circuit_number == 2 and long_dist < 0:
             # Robot exceeded circuit boundaries
+            done = True
+        elif ((e_lat, long_dist) in self.obstacles):
             done = True
         else:
             done = False
@@ -327,19 +362,19 @@ class VehicleTfmEnv(gym.Env):
         # State = (lateral_error, longitudinal_distance)
         # For the straigth lane use case, the lateral error matches the y coordinate
         # and the longitudinal distance matches the x coordinate
-        e_lat, long_dist = self.state
-        
-        # Get robot sensors
-        x, y, _ = self.sensors
+        e_lat, long_dist, _, _, _ = self.state
         
         # Reward due to robot out of circuit boundaries
-        if e_lat == -2 or e_lat == 2 or (self.circuit_number == 2 and x < 0):
+        if e_lat == -2 or e_lat == 2 or (self.circuit_number == 2 and long_dist < 0):
             reward_out_boundaries = -1
         else:
             reward_out_boundaries = 0
             
         # Reward due to collision with obstacles
-        reward_obs = 0
+        if ((e_lat, long_dist) in self.obstacles):
+            reward_obs = -1
+        else:
+            reward_obs = 0
         
         # Reward if robot follows the center lane of the circuit
         if e_lat == 0:
@@ -349,10 +384,19 @@ class VehicleTfmEnv(gym.Env):
         else:
             reward_lane = 0
             
+        # Reward if robot moves forward along the road
+        if long_dist > self.long_dist_old:
+            reward_move_forward = 0.1
+        elif long_dist < self.long_dist_old:
+            reward_move_forward = -0.1
+        else:
+            reward_move_forward = -0.1
+        self.long_dist_old = long_dist
+            
         # Reward if destination reached
         if self.destination_reached == True:
             reward_destination = 1
         else:
             reward_destination = 0
         
-        return reward_lane + reward_out_boundaries + reward_obs + reward_destination
+        return reward_lane + reward_out_boundaries + reward_obs + reward_destination + reward_move_forward

@@ -8,7 +8,7 @@ import gym
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from trajectoryplan.trajplan import getQvalue, initQtable, getAction, updateQtable
+from trajectoryplan.trajplan import getQvalue, initQtable_2, getAction, updateQtable
 import random
 
 # Make experiments reproducible
@@ -20,14 +20,17 @@ random.seed(10)
 if __name__ == "__main__":
     
     # Give a name to the environment for registration
-    env_name = 'VehicleTfm-v0'
+    env_name = 'diff_env_discrete'
+    version = 'v2'
+    env_name_id = env_name + '-' + version
+    entry_point_name = 'vehiclegym.envs.' + env_name + '_' + version + ':VehicleTfmEnv'
     
     # Calibrate the parameters of the environment accordingly
     config = {
         'x_goal': 19,
         'y_goal': 0,
         'circuit_number': 2,
-        'obs': False
+        'obs': True
     }
     
     # Registry of environment
@@ -37,14 +40,14 @@ if __name__ == "__main__":
             print("Remove {} from registry".format(env))
             del gym.envs.registration.registry.env_specs[env]
     gym.envs.registration.register(
-        id=env_name,
-        entry_point='vehiclegym.envs.vehicle_env_discrete:VehicleTfmEnv',
-        kwargs=config
+        id = env_name_id,
+        entry_point = entry_point_name,
+        kwargs = config
     )
-    print("Add {} to registry".format(env_name))
+    print("Add {} to registry".format(env_name_id))
     
     # Load environment
-    env = gym.make(env_name)
+    env = gym.make(env_name_id)
     
     # Q learning algorithm parameters
     # Learning rate for q learning
@@ -62,13 +65,12 @@ if __name__ == "__main__":
     # Create empty list for average reward over 40 episodes
     avg_reward_list = []
     # Initialize Q table
-    q_table = initQtable()
-    # q_table[2][:,1] = 1
+    q_table = initQtable_2(env_name + '_' + version)
     
     # Q learning algorithm
     for ep in range(total_episodes):
         # Reset environment
-        state = env.reset()
+        state = env.reset(1000)
         
         # Initialize variables at the beggining of episode
         episodic_reward = 0

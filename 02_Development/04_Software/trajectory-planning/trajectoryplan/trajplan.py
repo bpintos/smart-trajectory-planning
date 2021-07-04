@@ -268,15 +268,69 @@ def initQtable_diff():
     actions = (0, 1, 2)
     e_lat_values = (-2, -1, 0, 1, 2)
     long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-    theta_values = (0, 90)
+    theta_values = (0, 90, 180, -90)
     states = []
     for e_lat_value in e_lat_values:
         for long_dist_value in long_dist_values:
-            states.append((e_lat_value,long_dist_value))
+            for theta_value in theta_values:
+                states.append((e_lat_value,long_dist_value,theta_value))
     states = tuple(states)
-    # states = tuple(e_lat_values)
     table = np.zeros((len(states),len(actions)))
-    #table = np.random.rand(len(states),len(actions))
+    return states, actions, table
+
+def initQtable_2(env_name):
+    if env_name == 'vehicle_env_discrete_v1':
+        actions = (0, 1, 2)
+        e_lat_values = (-2, -1, 0, 1, 2)
+        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        states = []
+        for e_lat_value in e_lat_values:
+            for long_dist_value in long_dist_values:
+                states.append((e_lat_value,long_dist_value))
+        states = tuple(states)
+        # states = tuple(e_lat_values)
+        table = np.zeros((len(states),len(actions)))
+        #table = np.random.rand(len(states),len(actions))
+    elif env_name == 'diff_env_discrete_v1':
+        actions = (0, 1, 2)
+        e_lat_values = (-2, -1, 0, 1, 2)
+        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        theta_values = (0, 90, 180, -90)
+        states = []
+        for e_lat_value in e_lat_values:
+            for long_dist_value in long_dist_values:
+                for theta_value in theta_values:
+                    states.append((e_lat_value,long_dist_value,theta_value))
+        states = tuple(states)
+        table = np.zeros((len(states),len(actions)))
+    elif env_name == 'diff_env_discrete_v2':
+        actions = (0, 1, 2)
+        e_lat_values = (-2, -1, 0, 1, 2)
+        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        theta_values = (0, 90, 180, -90)
+        obs_long_values = (0, 1, 2, 3, 4)
+        obs_lat_values = (-1, 0, 1)
+        states = []
+        for e_lat_value in e_lat_values:
+            for long_dist_value in long_dist_values:
+                for theta_value in theta_values:
+                    for obs_long_value in obs_long_values:
+                        for obs_lat_value in obs_lat_values:
+                            states.append((e_lat_value,long_dist_value,theta_value,obs_long_value,obs_lat_value))
+        states = tuple(states)
+        table = np.zeros((len(states),len(actions)))
+    else:
+        actions = (0, 1, 2)
+        e_lat_values = (-2, -1, 0, 1, 2)
+        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        states = []
+        for e_lat_value in e_lat_values:
+            for long_dist_value in long_dist_values:
+                states.append((e_lat_value,long_dist_value))
+        states = tuple(states)
+        # states = tuple(e_lat_values)
+        table = np.zeros((len(states),len(actions)))
+        #table = np.random.rand(len(states),len(actions))
     return states, actions, table
 
 def getAction(q_table, state):
