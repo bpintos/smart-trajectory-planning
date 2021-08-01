@@ -92,6 +92,7 @@ class Buffer:
         critic_optimizer.apply_gradients(
             zip(critic_grad, critic_model.trainable_variables)
         )
+        print("critic_loss ->  {}".format(critic_loss))
 
         with tf.GradientTape() as tape:
             actions = actor_model(state_batch, training=True)
@@ -104,6 +105,7 @@ class Buffer:
         actor_optimizer.apply_gradients(
             zip(actor_grad, actor_model.trainable_variables)
         )
+        print("actor_loss ->  {}".format(actor_loss))
 
     # We compute the loss and update parameters
     def learn(self, target_actor, target_critic, actor_model, critic_model,\
@@ -136,11 +138,12 @@ def get_actor(num_states, upper_bound):
     # Initialize weights between -3e-3 and 3-e3
     # last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
     initializer = tf.keras.initializers.GlorotUniform()
+    number_neurons = 50
 
     inputs = layers.Input(shape=(num_states,))
-    out = layers.Dense(500, activation="relu", kernel_initializer=initializer)(inputs)
-    out = layers.Dense(500, activation="relu", kernel_initializer=initializer)(out)
-    outputs = layers.Dense(1, activation="tanh", kernel_initializer=initializer)(out)
+    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(inputs)
+    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(out)
+    outputs = layers.Dense(1, activation="tanh")(out)
 
     # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
@@ -149,20 +152,23 @@ def get_actor(num_states, upper_bound):
 
 
 def get_critic(num_states, num_actions):
+    initializer = tf.keras.initializers.GlorotUniform()
+    number_neurons = 50
+    
     # State as input
     state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(500, activation="relu")(state_input)
-    state_out = layers.Dense(500, activation="relu")(state_out)
+    state_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(state_input)
+    state_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(500, activation="relu")(action_input)
+    action_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(action_input)
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(500, activation="relu")(concat)
-    out = layers.Dense(500, activation="relu")(out)
+    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(concat)
+    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(out)
     outputs = layers.Dense(1)(out)
 
     # Outputs single value for give state-action
@@ -189,57 +195,6 @@ def policy(state, noise_object, actor_model, lower_bound, upper_bound, ep):
     #     action = [np.squeeze(legal_action)]
 
     return [np.squeeze(legal_action)], [np.squeeze(sampled_actions)], [np.squeeze(noise)]
-
-def DiscretizeState(state):
-    e_lat = state[0]
-    e_theta = state[1]
-    # Discretize lateral distance
-    # if e_lat <= -1:
-    #     e_lat_discrete = -1
-    # elif e_lat > -1 and e_lat <= -0.6:
-    #     e_lat_discrete = -0.8
-    # elif e_lat > -0.6 and e_lat <= -0.2:
-    #     e_lat_discrete = -0.4
-    # elif e_lat > -0.2 and e_lat < 0.2:
-    #     e_lat_discrete = 0
-    # elif e_lat >= 0.2 and e_lat < 0.6:
-    #     e_lat_discrete = 0.4
-    # elif e_lat >= 0.6 and e_lat < 1:
-    #     e_lat_discrete = 0.8
-    # elif e_lat >= 1:
-    #     e_lat_discrete = 1
-    if e_lat > 0:
-        e_lat_discrete = 0.5
-    else:
-        e_lat_discrete = -0.5
-    
-    # Discretize vehicle heading
-    # if e_theta >= -0.55 and e_theta <= -0.45:
-    #     e_theta_discrete = -0.5
-    # elif e_theta > -0.45 and e_theta <= -0.35:
-    #     e_theta_discrete = -0.4
-    # elif e_theta > -0.35 and e_theta <= -0.25:
-    #     e_theta_discrete = -0.3
-    # elif e_theta > -0.25 and e_theta <= -0.15:
-    #     e_theta_discrete = -0.2
-    # elif e_theta > -0.15 and e_theta <= -0.05:
-    #     e_theta_discrete = -0.1
-    # elif e_theta > -0.05 and e_theta < 0.05:
-    #     e_theta_discrete = 0
-    # elif e_theta >= 0.05 and e_theta < 0.15:
-    #     e_theta_discrete = 0.1
-    # elif e_theta >= 0.15 and e_theta < 0.25:
-    #     e_theta_discrete = 0.2
-    # elif e_theta >= 0.25 and e_theta < 0.35:
-    #     e_theta_discrete = 0.3
-    # elif e_theta >= 0.35 and e_theta < 0.45:
-    #     e_theta_discrete = 0.4
-    # elif e_theta >= 0.45 and e_theta <= 0.55:
-    #     e_theta_discrete = 0.5
-    
-    e_theta_discrete = 0
-        
-    return e_lat_discrete, e_theta_discrete
 
 def getQvalue(q_table, state, action):
     state_axis = q_table[0]
@@ -291,6 +246,18 @@ def initQtable_2(env_name):
         # states = tuple(e_lat_values)
         table = np.zeros((len(states),len(actions)))
         #table = np.random.rand(len(states),len(actions))
+    elif env_name == 'vehicle_env_discrete_v2':
+        actions = (0, 1, 2)
+        e_lat_values = (-2, -1, 0, 1, 2)
+        obs_long_values = (0, 1, 2)
+        obs_lat_values = (-1, 0, 1)
+        states = []
+        for e_lat_value in e_lat_values:
+            for obs_long_value in obs_long_values:
+                for obs_lat_value in obs_lat_values:
+                    states.append((e_lat_value,obs_long_value,obs_lat_value))
+        states = tuple(states)
+        table = np.zeros((len(states),len(actions)))
     elif env_name == 'diff_env_discrete_v1':
         actions = (0, 1, 2)
         e_lat_values = (-2, -1, 0, 1, 2)
@@ -306,17 +273,16 @@ def initQtable_2(env_name):
     elif env_name == 'diff_env_discrete_v2':
         actions = (0, 1, 2)
         e_lat_values = (-2, -1, 0, 1, 2)
-        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+        # long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
         theta_values = (0, 90, 180, -90)
-        obs_long_values = (0, 1, 2, 3, 4)
+        obs_long_values = (0, 1, 2)
         obs_lat_values = (-1, 0, 1)
         states = []
         for e_lat_value in e_lat_values:
-            for long_dist_value in long_dist_values:
-                for theta_value in theta_values:
-                    for obs_long_value in obs_long_values:
-                        for obs_lat_value in obs_lat_values:
-                            states.append((e_lat_value,long_dist_value,theta_value,obs_long_value,obs_lat_value))
+            for theta_value in theta_values:
+                for obs_long_value in obs_long_values:
+                    for obs_lat_value in obs_lat_values:
+                        states.append((e_lat_value,theta_value,obs_long_value,obs_lat_value))
         states = tuple(states)
         table = np.zeros((len(states),len(actions)))
     else:
@@ -351,15 +317,3 @@ def updateQtable(q_table, state, action, q_value_new):
     q_values = q_table[2]
     q_values[index_state, index_action] = q_value_new
     return state_axis, action_axis, q_values
-
-# np.random.seed(7)
-# tf.random.set_seed(7)
-
-
-# table = initQtable()
-
-# state = (-1, -0.4)
-# action = -5
-# value = getQvalue(table, state, action)
-# best_action = getAction(table, state)
-# value_best = getQvalue(table, state, best_action)

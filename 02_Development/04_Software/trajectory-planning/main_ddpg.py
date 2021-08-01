@@ -14,16 +14,20 @@ np.random.seed(7)
 tf.random.set_seed(7)
 
 if __name__ == "__main__":
-    env_name = 'VehicleTfm-v0'
+    
+    # Give a name to the environment for registration
+    env_name = 'vehicle_env_continuous'
+    version = 'v1'
+    env_name_id = env_name + '-' + version
+    entry_point_name = 'vehiclegym.envs.' + env_name + '_' + version + ':VehicleTfmEnv'
+    
+    # Calibrate the parameters of the environment accordingly
     config = {
-        'x_goal': 19,
+        'x_goal': 9,
         'y_goal': 0,
         'circuit_number': 2,
         'obs': False
     }
-    
-    # goal circuit 1: x = -1, y = 0
-    # goal circuit 2: x = 19, y = 0
     
     # Registry of environment
     env_dict = gym.envs.registration.registry.env_specs.copy()
@@ -32,13 +36,13 @@ if __name__ == "__main__":
             print("Remove {} from registry".format(env))
             del gym.envs.registration.registry.env_specs[env]
     gym.envs.registration.register(
-        id=env_name,
-        entry_point='vehiclegym.envs.vehicle_env:VehicleTfmEnv',
-        kwargs=config
+        id = env_name_id,
+        entry_point = entry_point_name,
+        kwargs = config
     )
-    print("Add {} to registry".format(env_name))
+    print("Add {} to registry".format(env_name_id))
     
-    env = gym.make(env_name)
+    env = gym.make(env_name_id)
     
     # Deep deterministic policy gradient taken from https://keras.io/examples/rl/ddpg_pendulum/
     num_states = env.observation_space.shape[0]
@@ -52,7 +56,7 @@ if __name__ == "__main__":
     print("Max Value of Action ->  {}".format(upper_bound))
     print("Min Value of Action ->  {}".format(lower_bound))
     
-    std_dev = 0.1
+    std_dev = 0.10
     # noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
     noise = WhiteActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
     
@@ -68,7 +72,7 @@ if __name__ == "__main__":
     target_critic.set_weights(critic_model.get_weights())
     
     # Learning rate for actor-critic models
-    critic_lr = 0.002 #0.0002
+    critic_lr = 0.0002 #0.0002
     actor_lr = 0.0001
     
     
@@ -79,7 +83,7 @@ if __name__ == "__main__":
     # Discount factor for future rewards
     gamma = 0.9 #0.99
     # Used to update target networks 
-    tau = 0.05 #0.02
+    tau = 1 #0.02
     
     buffer = Buffer(num_states, num_actions, 50000, 64) #5000
     
@@ -88,7 +92,6 @@ if __name__ == "__main__":
     # To store average reward history of last few episodes
     avg_reward_list = []
     
-    # Takes about 4 min
     for ep in range(total_episodes):
         prev_state = env.reset()
         episodic_reward = 0
@@ -101,18 +104,15 @@ if __name__ == "__main__":
         x_obs_record = np.empty(0)
         
         fig = plt.figure(figsize=(12, 15))
-        ax1 = fig.add_subplot(511)
-        ax2 = fig.add_subplot(512)
-        ax3 = fig.add_subplot(513)
-        ax4 = fig.add_subplot(514)
-        ax5 = fig.add_subplot(515)
+        ax1 = fig.add_subplot(411)
+        ax2 = fig.add_subplot(412)
+        ax3 = fig.add_subplot(413)
+        ax4 = fig.add_subplot(414)
         
         iteration = 0
         
         while True:
-            # Uncomment this to see the Actor in action
-            # But not in a python notebook.
-            env.render()
+            # env.render()
             
             tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
             
@@ -123,8 +123,8 @@ if __name__ == "__main__":
             print("Action ->  {}".format(action))
             iteration += 1
             
-            critic_model([tf.convert_to_tensor(np.array([state])),tf.convert_to_tensor(np.array([action]))])
-            actor_model(tf.convert_to_tensor(np.array([state])))
+            # critic_model([tf.convert_to_tensor(np.array([state])),tf.convert_to_tensor(np.array([action]))])
+            # actor_model(tf.convert_to_tensor(np.array([state])))
             
             buffer.record((prev_state, action, reward, state))
             episodic_reward += reward
@@ -158,14 +158,12 @@ if __name__ == "__main__":
         ax1.set_title("elat")
         ax2.plot(e_theta_record)
         ax2.set_title("etheta")
-        ax3.plot(x_obs_record)
-        ax3.set_title("xobs")
-        ax4.plot(steer_record, 'b')
-        ax4.plot(steer_raw_record, 'r')
-        ax4.plot(steer_noise_record, 'g')
-        ax4.set_title("delta")
-        ax5.set_title("Episode * {} * Episodic Reward is ==> {}".format(ep, episodic_reward))
-        ax5.plot(reward_record)
+        ax3.plot(steer_record, 'b')
+        ax3.plot(steer_raw_record, 'r')
+        ax3.plot(steer_noise_record, 'g')
+        ax3.set_title("delta")
+        ax4.set_title("Episode * {} * Episodic Reward is ==> {}".format(ep, episodic_reward))
+        ax4.plot(reward_record)
         plt.show()
         
     # Plotting graph

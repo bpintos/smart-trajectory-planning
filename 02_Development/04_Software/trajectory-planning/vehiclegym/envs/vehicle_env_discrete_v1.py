@@ -37,8 +37,10 @@ class VehicleTfmEnv(gym.Env):
         
         # Circuit number
         self.circuit_number = circuit_number
-        self.obs = obs
-        self.obstacles = [(0,3),(1,3),(2,3),(-2,7),(-1,7),(0,7),(0,11),(1,11),(2,11),(-2,15),(-1,15),(0,15),(0,18),(1,18),(2,18)]
+        if obs:
+            self.obstacles = [(0,3),(1,3),(2,3),(-2,7),(-1,7),(0,7),(0,11),(1,11),(2,11),(-2,15),(-1,15),(0,15),(0,18),(1,18),(2,18)]
+        else:
+            self.obstacles = []
         
         # Load circuit specifications
         if self.circuit_number == 1:
@@ -66,7 +68,7 @@ class VehicleTfmEnv(gym.Env):
         
         # Variable initialization
         self.done = False
-        self.state = self.reset()
+        self.state = self.reset(0)
         self.viewer = None
         self.display = None
         self.veh_transform = None
@@ -106,7 +108,7 @@ class VehicleTfmEnv(gym.Env):
 
         return self.state, self._reward(action), self.done, self.sensors
      
-    def reset(self):
+    def reset(self, ep):
         # Reset the state of the environment to an initial state
         
         self.destination_reached = False
@@ -211,15 +213,15 @@ class VehicleTfmEnv(gym.Env):
             self.viewer.add_geom(vehicle)
             
             # Add obstacle
-            if self.obs == True:
-                if self.circuit_number == 2:
-                    obstacle = rendering.make_circle(obs_radius)
-                    obstacle.set_color(0, 0, 0)
-                    x_obs = x_track_ini + self.x_obs*m2pixel
-                    y_obs = y_track_ini + self.y_obs*m2pixel
-                    self.obs_transform = rendering.Transform(translation=(x_obs, y_obs), rotation=0)
-                    obstacle.add_attr(self.obs_transform)
-                    self.viewer.add_geom(obstacle)
+            # if self.obs == True:
+            #     if self.circuit_number == 2:
+            #         obstacle = rendering.make_circle(obs_radius)
+            #         obstacle.set_color(0, 0, 0)
+            #         x_obs = x_track_ini + self.x_obs*m2pixel
+            #         y_obs = y_track_ini + self.y_obs*m2pixel
+            #         self.obs_transform = rendering.Transform(translation=(x_obs, y_obs), rotation=0)
+            #         obstacle.add_attr(self.obs_transform)
+            #         self.viewer.add_geom(obstacle)
 
             # Add left and right road lanes
             x_left_rel, y_left_rel = 0, lane_width/2
@@ -279,9 +281,6 @@ class VehicleTfmEnv(gym.Env):
         # Vehicle sensors
         x, y, _ = self.sensors
         
-        # Distance to obstacle
-        dist_obs = np.sqrt((self.x_obs-x)**2 + (self.y_obs-y)**2)
-        
         # Set maximum simulation time depending on the selected circuit
         if self.circuit_number == 1:
             done_time = 50
@@ -300,8 +299,6 @@ class VehicleTfmEnv(gym.Env):
             self.destination_reached = True
         elif self.circuit_number == 2 and x < 0:
             # Vehicle out of circuit
-            done = True
-        elif self.obs == True and dist_obs <= self.obs_radius:
             done = True
         elif (e_lat, long_dist) in self.obstacles:
             done = True

@@ -20,7 +20,7 @@ random.seed(10)
 if __name__ == "__main__":
     
     # Give a name to the environment for registration
-    env_name = 'diff_env_discrete'
+    env_name = 'vehicle_env_discrete'
     version = 'v2'
     env_name_id = env_name + '-' + version
     entry_point_name = 'vehiclegym.envs.' + env_name + '_' + version + ':VehicleTfmEnv'
@@ -53,11 +53,11 @@ if __name__ == "__main__":
     # Learning rate for q learning
     alpha = 1
     # Exploration rate
-    epsilon = 0.20
+    epsilon = 0.10
     # Total learning episodes
     total_episodes = 1000
     # Discount factor for future rewards
-    gamma = 1
+    gamma = 0.9
     
     # Variable initialization before episodes
     # Create empty list for reward of each episode
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     # Q learning algorithm
     for ep in range(total_episodes):
         # Reset environment
-        state = env.reset(1000)
+        state = env.reset(ep)
         
         # Initialize variables at the beggining of episode
         episodic_reward = 0
