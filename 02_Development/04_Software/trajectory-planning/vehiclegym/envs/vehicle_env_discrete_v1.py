@@ -44,14 +44,14 @@ class VehicleTfmEnv(gym.Env):
         
         # Load circuit specifications
         if self.circuit_number == 1:
-            self.circuit = pd.read_csv('vehiclegym/envs/circuit1.csv')
+            self.circuit = pd.read_csv('vehiclegym/envs/circuits/circuit1.csv')
             self.lane_width = 1
             self.x_obs = 10
             self.y_obs = 0
             self.obs_radius = 0.3
             self.obs_transform = None
         elif self.circuit_number == 2:
-            self.circuit = pd.read_csv('vehiclegym/envs/circuit2.csv')
+            self.circuit = pd.read_csv('vehiclegym/envs/circuits/circuit2.csv')
             self.lane_width = 2
             self.x_obs = 10
             self.y_obs = 0

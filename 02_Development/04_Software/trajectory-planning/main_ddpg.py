@@ -56,7 +56,7 @@ if __name__ == "__main__":
     print("Max Value of Action ->  {}".format(upper_bound))
     print("Min Value of Action ->  {}".format(lower_bound))
     
-    std_dev = 0.10
+    std_dev = 0.2
     # noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
     noise = WhiteActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
     

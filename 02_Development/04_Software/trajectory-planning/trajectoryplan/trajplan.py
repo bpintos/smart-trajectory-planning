@@ -137,7 +137,7 @@ def update_target(target_weights, weights, tau):
 def get_actor(num_states, upper_bound):
     # Initialize weights between -3e-3 and 3-e3
     # last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
-    initializer = tf.keras.initializers.GlorotUniform()
+    initializer = tf.keras.initializers.GlorotNormal()
     number_neurons = 50
 
     inputs = layers.Input(shape=(num_states,))
@@ -152,7 +152,7 @@ def get_actor(num_states, upper_bound):
 
 
 def get_critic(num_states, num_actions):
-    initializer = tf.keras.initializers.GlorotUniform()
+    initializer = tf.keras.initializers.GlorotNormal()
     number_neurons = 50
     
     # State as input
@@ -205,20 +205,6 @@ def getQvalue(q_table, state, action):
     q_value = q_values[index_state, index_action]
     return q_value
 
-def initQtable():
-    actions = (0, 1, 2)
-    e_lat_values = (-2, -1, 0, 1, 2)
-    long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-    states = []
-    for e_lat_value in e_lat_values:
-        for long_dist_value in long_dist_values:
-            states.append((e_lat_value,long_dist_value))
-    states = tuple(states)
-    # states = tuple(e_lat_values)
-    table = np.zeros((len(states),len(actions)))
-    #table = np.random.rand(len(states),len(actions))
-    return states, actions, table
-
 def initQtable_diff():
     actions = (0, 1, 2)
     e_lat_values = (-2, -1, 0, 1, 2)
@@ -233,7 +219,7 @@ def initQtable_diff():
     table = np.zeros((len(states),len(actions)))
     return states, actions, table
 
-def initQtable_2(env_name):
+def initQtable(env_name):
     if env_name == 'vehicle_env_discrete_v1':
         actions = (0, 1, 2)
         e_lat_values = (-2, -1, 0, 1, 2)

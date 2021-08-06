@@ -8,8 +8,9 @@ import gym
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from trajectoryplan.trajplan import getQvalue, initQtable_2, getAction, updateQtable
+from trajectoryplan.trajplan import getQvalue, initQtable, getAction, updateQtable
 import random
+import pickle
 
 # Make experiments reproducible
 np.random.seed(7)
@@ -20,7 +21,7 @@ random.seed(10)
 if __name__ == "__main__":
     
     # Give a name to the environment for registration
-    env_name = 'vehicle_env_discrete'
+    env_name = 'diff_env_discrete'
     version = 'v2'
     env_name_id = env_name + '-' + version
     entry_point_name = 'vehiclegym.envs.' + env_name + '_' + version + ':VehicleTfmEnv'
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     # Create empty list for average reward over 40 episodes
     avg_reward_list = []
     # Initialize Q table
-    q_table = initQtable_2(env_name + '_' + version)
+    q_table = initQtable(env_name + '_' + version)
     
     # Q learning algorithm
     for ep in range(total_episodes):
@@ -94,7 +95,7 @@ if __name__ == "__main__":
         
         while True:
             # Render environment
-            env.render()
+            # env.render()
             
             # Action determination
             if np.random.uniform(0,1) < epsilon:
@@ -166,4 +167,8 @@ if __name__ == "__main__":
     plt.ylabel("Average Episodic Reward")
     plt.show()
     env.close()
+    
+    # Save q table in a file
+    with open('vehiclegym/envs/qtable/' + env_name + '_' + version + '.pickle', 'wb') as f:
+        pickle.dump(q_table, f)
     

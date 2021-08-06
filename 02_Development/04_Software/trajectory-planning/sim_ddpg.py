@@ -25,9 +25,9 @@ if __name__ == "__main__":
     
     # Calibrate the parameters of the environment accordingly
     config = {
-        'x_goal': 9,
+        'x_goal': -1,
         'y_goal': 0,
-        'circuit_number': 2,
+        'circuit_number': 1,
         'obs': False
     }
     
@@ -70,10 +70,10 @@ if __name__ == "__main__":
     target_critic = get_critic(num_states, num_actions)
     
     # Making the weights equal initially
-    target_actor.load_weights('VehicleTfm_target_actor.h5')
-    target_critic.load_weights('VehicleTfm_target_critic.h5')
-    actor_model.load_weights('VehicleTfm_actor.h5')
-    critic_model.load_weights('VehicleTfm_critic.h5')
+    target_actor.load_weights('vehiclegym/envs/weights/vehicle_env_continuous_v1_ay_nolim_circuit/VehicleTfm_target_actor.h5')
+    target_critic.load_weights('vehiclegym/envs/weights/vehicle_env_continuous_v1_ay_nolim_circuit/VehicleTfm_target_critic.h5')
+    actor_model.load_weights('vehiclegym/envs/weights/vehicle_env_continuous_v1_ay_nolim_circuit/VehicleTfm_actor.h5')
+    critic_model.load_weights('vehiclegym/envs/weights/vehicle_env_continuous_v1_ay_nolim_circuit/VehicleTfm_critic.h5')
     
     iteration = 0
     episodic_reward = 0
@@ -146,7 +146,7 @@ if __name__ == "__main__":
         ax5.set_yticks(np.arange(0, 1.2, step=0.2))
         ax5.grid(color='gray', linestyle='-', linewidth=1)
         fig.tight_layout(pad=1.0)
-        fig.suptitle('Initial conditions: elat_ini = 0.4 m, etheta_ini = 40 deg', fontsize=30, y=1.02)
+        fig.suptitle('Initial conditions: elat_ini = 0 m, etheta_ini = 0 deg', fontsize=30, y=1.02)
         plt.show()
     else:
         fig = plt.figure(figsize=(18, 14))
@@ -175,5 +175,5 @@ if __name__ == "__main__":
         ax4.set_yticks(np.arange(0, 1.2, step=0.2))
         ax4.grid(color='gray', linestyle='-', linewidth=1)
         fig.tight_layout(pad=1.0)
-        fig.suptitle('Initial conditions: elat_ini = -0.4 m, etheta_ini = -40 deg', fontsize=30, y=1.02)
+        fig.suptitle('Initial conditions: elat_ini = 0 m, etheta_ini = 0 deg', fontsize=30, y=1.02)
         plt.show()
