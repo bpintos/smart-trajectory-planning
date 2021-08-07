@@ -177,24 +177,16 @@ def get_critic(num_states, num_actions):
     return model
 
 
-def policy(state, noise_object, actor_model, lower_bound, upper_bound, ep):
+def policy(state, std_dev, actor_model, lower_bound, upper_bound):
     sampled_actions = tf.squeeze(actor_model(state))
-    noise = noise_object(sampled_actions)
-    # Adding noise to action
+    # Exploration noise
+    noise = np.random.normal(0, std_dev)
+    # Action + exploration
     sampled_actions_noise = sampled_actions.numpy() + noise
+    # Upper and lower limitation of the action
+    action_lim = np.clip(sampled_actions_noise, lower_bound, upper_bound)
 
-    # We make sure action is within bounds
-    legal_action = np.clip(sampled_actions_noise, lower_bound, upper_bound)
-    
-    # if ep <= 10:
-    #     circuit = pd.read_csv('vehiclegym/envs/circuit1_delta_higher_resolution.csv')
-    #     delta = circuit['chasis.delta']
-    #     action = np.array([delta[index]/20])
-    #     action = [np.squeeze(action)]
-    # else:
-    #     action = [np.squeeze(legal_action)]
-
-    return [np.squeeze(legal_action)], [np.squeeze(sampled_actions)], [np.squeeze(noise)]
+    return [np.squeeze(action_lim)], [np.squeeze(sampled_actions)], [np.squeeze(noise)]
 
 def getQvalue(q_table, state, action):
     state_axis = q_table[0]

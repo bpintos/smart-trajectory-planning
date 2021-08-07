@@ -28,8 +28,8 @@ class VehicleTfmEnv(gym.Env):
         self.action_space = spaces.Box(-high, high)
         
         # Observation space (normalized between -1 and 1)
-        high = np.array([1, 1], dtype = np.float32) #[1, 1, 1]
-        low = np.array([-1, -1], dtype = np.float32) #[-1, -1, 0]
+        high = np.array([1, 1, 1, 1], dtype = np.float32) #[1, 1, 1]
+        low = np.array([-1, -1, 0, -1], dtype = np.float32) #[-1, -1, 0]
         self.observation_space = spaces.Box(low, high)
         
         # X and Y coordinates of the destination
@@ -46,8 +46,11 @@ class VehicleTfmEnv(gym.Env):
         self.obs = obs
         
         # Load vehicle model
-        model_path = '../../02_Libraries/Chasis_simpl.fmu'
+        model_path = '../../02_Libraries/Chasis_simpl_5vel.fmu'
         self.model = load_fmu(model_path)
+        
+        # Vehicle look ahead distance
+        self.lad_obs = 6
         
         # Load circuit specifications
         if self.circuit_number == 1:
@@ -111,7 +114,7 @@ class VehicleTfmEnv(gym.Env):
         # Get sensor measurements from the vehicle model
         res_sensors = tuple([res.final(k) for k in ['x','y','theta_out']])
         self.sensors = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2])
-        a_lat = np.tan(action[0]*np.pi/180)*2.5*2.5/(0.12 + 0.16)
+        a_lat = np.tan(action[0]*np.pi/180)*5*5/(0.12 + 0.16)
         info = (res_sensors[0] + self.x_initial, res_sensors[1] + self.y_initial, res_sensors[2], a_lat)
         
         # print("Action ->  {}".format(action))
@@ -305,7 +308,7 @@ class VehicleTfmEnv(gym.Env):
         # Check if environment is terminated
         
         # Get state
-        e_lat, e_theta = self.state
+        e_lat, e_theta, _, _ = self.state
         # Vehicle sensors
         x, y, _ = self.sensors
         
@@ -324,7 +327,7 @@ class VehicleTfmEnv(gym.Env):
         elif self.stop_time >= done_time:
             # Simulation exceeded maximum simulation time
             done = True
-        elif self.circuit_number == 2 and x >= self.x_goal: # and x <= x_dest_fin and y >= y_dest_ini and y <= y_dest_fin:
+        elif self.circuit_number == 2 and x >= self.x_goal:
             # Vehicle reached final destination
             done = True
             self.destination_reached = True
@@ -351,7 +354,7 @@ class VehicleTfmEnv(gym.Env):
         # Reward steering gradient
         # Steering gradient calculation
         action = action[0]
-        a_lat = np.tan(action*np.pi/180)*2.5*2.5/(0.12 + 0.16)
+        a_lat = np.tan(action*np.pi/180)*5*5/(0.12 + 0.16)
         action = action/self.max_steering
         if iteration == 0:
             self.action_old = action
@@ -367,18 +370,18 @@ class VehicleTfmEnv(gym.Env):
         self.action_old = action
         
         # Reward due to lateral acceleration
-        if abs(a_lat) >= 5:
-            reward_ay = 0#(5-abs(a_lat))/32*2
+        if abs(a_lat) >= 8:
+            reward_ay = (8-abs(a_lat))/32*2
         else:
             reward_ay = 0
         
         # Reward due to vehicle exceeding road boundaries
         # Get state
-        e_lat, _ = self.state
+        e_lat, _, x_obs, _ = self.state
         
         # Reward out of boundaries only applied if vehicle exceedes road boundaries
-        if abs(e_lat) > 1:
-            reward_out_boundaries = 0
+        if abs(e_lat) > 0.9:
+            reward_out_boundaries = (0.9 - abs(e_lat))/0.1*5
         else:
             reward_out_boundaries = 0
             
@@ -386,21 +389,28 @@ class VehicleTfmEnv(gym.Env):
         # Get sensors
         x, y, _ = self.sensors
         dist_obs = np.sqrt((self.x_obs - x)**2 + (self.y_obs - y)**2)
-        if self.obs == True and dist_obs <= self.obs_radius:
-            reward_obs = -1
+        if self.obs == True and (dist_obs - 0.6) <= 0:
+            reward_obs = (dist_obs - 0.6)/0.3*5
         else:
             reward_obs = 0
+        # if self.obs == True and dist_obs <= self.obs_radius:
+        #     reward_obs = -1000
+        # else:
+        #     reward_obs = 0
         
         # Reward if vehicle follows the center lane of the road
         lane_std = 0.2
         reward_lane = np.exp(-e_lat**2/(2*lane_std**2))
-        reward_lane = 1*reward_lane
+        if x_obs == 0:
+            reward_lane = 1*reward_lane
+        else:
+            reward_lane = -0.1
         
         # Reward if destination reached
         if self.destination_reached == True:
-            reward_destination = 0
+            reward_destination = 0#(1/self.x_goal*x+1)*0.2
         else:
-            reward_destination = 0
+            reward_destination = 0#(1/self.x_goal*x+1)*0.2
         
         # print("reward_obs ->  {}".format(reward_obs))
         
@@ -457,13 +467,17 @@ class VehicleTfmEnv(gym.Env):
         etheta = -etheta/180
         
         # Longitudinal distance to obstacle
-        lad_obs = 5
         x_obs = self.x_obs - x
-        x_obs = min(x_obs, lad_obs)
-        x_obs = max(x_obs, -lad_obs)
+        x_obs = min(x_obs, self.lad_obs)
+        x_obs = max(x_obs, -self.lad_obs)
         
         # Normalize longitudinal distance to obstacle between 0 and 1
-        x_obs = abs(x_obs)/lad_obs
+        x_obs = np.clip(x_obs/self.lad_obs, 0, 1)
         x_obs = 1 - x_obs
+        if x >= self.x_obs:
+            x_obs = 0
         
-        return elat, etheta #, x_obs
+        # Obstacle lateral distance
+        y_obs = elat - 2*self.y_obs/self.lane_width
+        
+        return elat, etheta, x_obs, y_obs
