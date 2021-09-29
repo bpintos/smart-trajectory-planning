@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
+import random
 # import pandas as pd
 
 class WhiteActionNoise:
@@ -65,6 +66,7 @@ class Buffer:
 
         self.state_buffer[index] = obs_tuple[0]
         self.action_buffer[index] = obs_tuple[1]
+        # self.action_buffer[index] = tuple(obs_tuple[1][0])
         self.reward_buffer[index] = obs_tuple[2]
         self.next_state_buffer[index] = obs_tuple[3]
 
@@ -134,7 +136,7 @@ def update_target(target_weights, weights, tau):
         a.assign(b * tau + a * (1 - tau))
 
 
-def get_actor(num_states, upper_bound):
+def get_actor(num_states, num_actions):
     # Initialize weights between -3e-3 and 3-e3
     # last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
     initializer = tf.keras.initializers.GlorotNormal()
@@ -142,11 +144,13 @@ def get_actor(num_states, upper_bound):
 
     inputs = layers.Input(shape=(num_states,))
     out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(inputs)
+    # out = layers.BatchNormalization()(out)
     out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(out)
+    # out = layers.BatchNormalization()(out)
     outputs = layers.Dense(1, activation="tanh")(out)
-
-    # Our upper bound is 2.0 for Pendulum.
-    outputs = outputs * upper_bound
+    # pedal = layers.Dense(1, activation="sigmoid")(out)
+    # outputs = layers.Concatenate()([steering, pedal])
+    
     model = tf.keras.Model(inputs, outputs)
     return model
 
@@ -158,17 +162,22 @@ def get_critic(num_states, num_actions):
     # State as input
     state_input = layers.Input(shape=(num_states))
     state_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(state_input)
+    # state_out = layers.BatchNormalization()(state_out)
     state_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(state_out)
+    # state_out = layers.BatchNormalization()(state_out)
 
     # Action as input
     action_input = layers.Input(shape=(num_actions))
     action_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(action_input)
+    # action_out = layers.BatchNormalization()(action_out)
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
     out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(concat)
+    # out = layers.BatchNormalization()(out)
     out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(out)
+    # out = layers.BatchNormalization()(out)
     outputs = layers.Dense(1)(out)
 
     # Outputs single value for give state-action
@@ -177,10 +186,14 @@ def get_critic(num_states, num_actions):
     return model
 
 
-def policy(state, std_dev, actor_model, lower_bound, upper_bound):
+def policy(state, std_dev, actor_model, lower_bound, upper_bound, ep):
     sampled_actions = tf.squeeze(actor_model(state))
     # Exploration noise
     noise = np.random.normal(0, std_dev)
+    # if ep%2 == 0:
+    #     noise = np.array([noise, 0])
+    # else:
+    #     noise = np.array([0, noise])
     # Action + exploration
     sampled_actions_noise = sampled_actions.numpy() + noise
     # Upper and lower limitation of the action
@@ -197,93 +210,31 @@ def getQvalue(q_table, state, action):
     q_value = q_values[index_state, index_action]
     return q_value
 
-def initQtable_diff():
-    actions = (0, 1, 2)
-    e_lat_values = (-2, -1, 0, 1, 2)
-    long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-    theta_values = (0, 90, 180, -90)
-    states = []
-    for e_lat_value in e_lat_values:
-        for long_dist_value in long_dist_values:
-            for theta_value in theta_values:
-                states.append((e_lat_value,long_dist_value,theta_value))
-    states = tuple(states)
+def initQtable(env_name, state_variables, actions):
+    states = state_variables[0]
+    number_variables = len(state_variables)
+    for i in range(1,number_variables):
+        variable = state_variables[i]
+        states_len = len(states)
+        states = states*len(variable)
+        variable = tuple(map(lambda x: (x,)*states_len, variable))
+        variable = tuple(np.hstack(variable))
+        states = tuple(map(lambda x, y: tuple(np.hstack((x,y))), states, variable))
     table = np.zeros((len(states),len(actions)))
-    return states, actions, table
-
-def initQtable(env_name):
-    if env_name == 'vehicle_env_discrete_v1':
-        actions = (0, 1, 2)
-        e_lat_values = (-2, -1, 0, 1, 2)
-        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-        states = []
-        for e_lat_value in e_lat_values:
-            for long_dist_value in long_dist_values:
-                states.append((e_lat_value,long_dist_value))
-        states = tuple(states)
-        # states = tuple(e_lat_values)
-        table = np.zeros((len(states),len(actions)))
-        #table = np.random.rand(len(states),len(actions))
-    elif env_name == 'vehicle_env_discrete_v2':
-        actions = (0, 1, 2)
-        e_lat_values = (-2, -1, 0, 1, 2)
-        obs_long_values = (0, 1, 2)
-        obs_lat_values = (-1, 0, 1)
-        states = []
-        for e_lat_value in e_lat_values:
-            for obs_long_value in obs_long_values:
-                for obs_lat_value in obs_lat_values:
-                    states.append((e_lat_value,obs_long_value,obs_lat_value))
-        states = tuple(states)
-        table = np.zeros((len(states),len(actions)))
-    elif env_name == 'diff_env_discrete_v1':
-        actions = (0, 1, 2)
-        e_lat_values = (-2, -1, 0, 1, 2)
-        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-        theta_values = (0, 90, 180, -90)
-        states = []
-        for e_lat_value in e_lat_values:
-            for long_dist_value in long_dist_values:
-                for theta_value in theta_values:
-                    states.append((e_lat_value,long_dist_value,theta_value))
-        states = tuple(states)
-        table = np.zeros((len(states),len(actions)))
-    elif env_name == 'diff_env_discrete_v2':
-        actions = (0, 1, 2)
-        e_lat_values = (-2, -1, 0, 1, 2)
-        # long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-        theta_values = (0, 90, 180, -90)
-        obs_long_values = (0, 1, 2)
-        obs_lat_values = (-1, 0, 1)
-        states = []
-        for e_lat_value in e_lat_values:
-            for theta_value in theta_values:
-                for obs_long_value in obs_long_values:
-                    for obs_lat_value in obs_lat_values:
-                        states.append((e_lat_value,theta_value,obs_long_value,obs_lat_value))
-        states = tuple(states)
-        table = np.zeros((len(states),len(actions)))
-    else:
-        actions = (0, 1, 2)
-        e_lat_values = (-2, -1, 0, 1, 2)
-        long_dist_values = (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-        states = []
-        for e_lat_value in e_lat_values:
-            for long_dist_value in long_dist_values:
-                states.append((e_lat_value,long_dist_value))
-        states = tuple(states)
-        # states = tuple(e_lat_values)
-        table = np.zeros((len(states),len(actions)))
-        #table = np.random.rand(len(states),len(actions))
     return states, actions, table
 
 def getAction(q_table, state):
     state_axis = q_table[0]
     action_axis = q_table[1]
     q_values = q_table[2]
+    # Find index of state axis
     index_state = state_axis.index(state)
+    # Select q values of actions belonging to that state
     q_values_state = q_values[index_state,:]
-    action_index = np.argmax(q_values_state)
+    # Find action which maximizes q value
+    q_max = np.amax(q_values_state)
+    action_index = np.where(q_values_state == q_max)
+    action_index = random.choice(action_index[0])
     action = action_axis[action_index]
     return action
 
