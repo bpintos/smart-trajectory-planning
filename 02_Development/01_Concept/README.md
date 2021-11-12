@@ -1,1 +1,0 @@
-smart trajectory planning concept
