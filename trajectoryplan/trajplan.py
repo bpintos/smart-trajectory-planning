@@ -76,37 +76,30 @@ class Buffer:
     # TensorFlow to build a static graph out of the logic and computations in our function.
     # This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
     @tf.function
-    def update(
-        self, state_batch, action_batch, reward_batch, next_state_batch, target_actor, target_critic,\
-            actor_model, critic_model, actor_optimizer, critic_optimizer, gamma
-    ):
+    def update(self, state_batch, action_batch, reward_batch, next_state_batch, target_actor,\
+               target_critic, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma):
         # Training and updating Actor & Critic networks.
-        # See Pseudo Code.
         with tf.GradientTape() as tape:
             target_actions = target_actor(next_state_batch, training=True)
-            y = reward_batch + gamma * target_critic(
-                [next_state_batch, target_actions], training=True
-            )
-            critic_value = critic_model([state_batch, action_batch], training=True)
+            next_state_action = tf.keras.layers.concatenate([next_state_batch, target_actions], axis=1)
+            y = reward_batch + gamma * target_critic(next_state_action, training=True)
+            state_action = tf.keras.layers.concatenate([state_batch, action_batch], axis=1)
+            critic_value = critic_model(state_action, training=True)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
 
         critic_grad = tape.gradient(critic_loss, critic_model.trainable_variables)
-        critic_optimizer.apply_gradients(
-            zip(critic_grad, critic_model.trainable_variables)
-        )
+        critic_optimizer.apply_gradients(zip(critic_grad, critic_model.trainable_variables))
         print("critic_loss ->  {}".format(critic_loss))
 
         with tf.GradientTape() as tape:
             actions = actor_model(state_batch, training=True)
-            critic_value = critic_model([state_batch, actions], training=True)
-            # Used `-value` as we want to maximize the value given
-            # by the critic for our actions
+            state_action = tf.keras.layers.concatenate([state_batch, actions], axis=1)
+            critic_value = critic_model(state_action, training=True)
+            # Used `-value` as we want to maximize the value given by the critic for our actions
             actor_loss = -tf.math.reduce_mean(critic_value)
 
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
-        actor_optimizer.apply_gradients(
-            zip(actor_grad, actor_model.trainable_variables)
-        )
+        actor_optimizer.apply_gradients(zip(actor_grad, actor_model.trainable_variables))
         print("actor_loss ->  {}".format(actor_loss))
 
     # We compute the loss and update parameters
@@ -114,18 +107,21 @@ class Buffer:
               actor_optimizer, critic_optimizer, gamma):
         # Get sampling range
         record_range = min(self.buffer_counter, self.buffer_capacity)
-        # Randomly sample indices
-        batch_indices = np.random.choice(record_range, self.batch_size)
-
-        # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
-        action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
-        reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
-        reward_batch = tf.cast(reward_batch, dtype=tf.float32)
-        next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
-
-        self.update(state_batch, action_batch, reward_batch, next_state_batch, target_actor,\
-                    target_critic, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma)
+        
+        if record_range != 0:
+            # Randomly sample indices
+            batch_indices = np.random.choice(record_range, self.batch_size)
+    
+            # Convert to tensors
+            state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
+            action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
+            reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
+            reward_batch = tf.cast(reward_batch, dtype=tf.float32)
+            next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
+            
+            # Update neural network weights
+            self.update(state_batch, action_batch, reward_batch, next_state_batch, target_actor,\
+                        target_critic, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma)
 
 
 # This update target parameters slowly
@@ -135,71 +131,28 @@ def update_target(target_weights, weights, tau):
     for (a, b) in zip(target_weights, weights):
         a.assign(b * tau + a * (1 - tau))
 
-
-def get_actor(num_states, num_actions):
-    # Initialize weights between -3e-3 and 3-e3
-    # last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
+def get_NN(input_layer, hidden_layer, output_layer, hidden_activation = 'relu', output_activation = None):
     initializer = tf.keras.initializers.GlorotNormal()
-    number_neurons = 50
-
-    inputs = layers.Input(shape=(num_states,))
-    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(inputs)
-    # out = layers.BatchNormalization()(out)
-    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(out)
-    # out = layers.BatchNormalization()(out)
-    outputs = layers.Dense(1, activation="tanh")(out)
-    # pedal = layers.Dense(1, activation="sigmoid")(out)
-    # outputs = layers.Concatenate()([steering, pedal])
-    
-    model = tf.keras.Model(inputs, outputs)
+    model = tf.keras.Sequential()
+    model.add(layers.Input(shape=input_layer))
+    for h in hidden_layer:
+        model.add(layers.Dense(units=h, activation=hidden_activation, kernel_initializer=initializer))
+    model.add(layers.Dense(units=output_layer, activation=output_activation, kernel_initializer=initializer))
     return model
 
-
-def get_critic(num_states, num_actions):
-    initializer = tf.keras.initializers.GlorotNormal()
-    number_neurons = 50
-    
-    # State as input
-    state_input = layers.Input(shape=(num_states))
-    state_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(state_input)
-    # state_out = layers.BatchNormalization()(state_out)
-    state_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(state_out)
-    # state_out = layers.BatchNormalization()(state_out)
-
-    # Action as input
-    action_input = layers.Input(shape=(num_actions))
-    action_out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(action_input)
-    # action_out = layers.BatchNormalization()(action_out)
-
-    # Both are passed through seperate layer before concatenating
-    concat = layers.Concatenate()([state_out, action_out])
-
-    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(concat)
-    # out = layers.BatchNormalization()(out)
-    out = layers.Dense(number_neurons, activation="relu", kernel_initializer=initializer)(out)
-    # out = layers.BatchNormalization()(out)
-    outputs = layers.Dense(1)(out)
-
-    # Outputs single value for give state-action
-    model = tf.keras.Model([state_input, action_input], outputs)
-
-    return model
-
-
-def policy(state, std_dev, actor_model, lower_bound, upper_bound, ep):
+def policy(state, std_dev, actor_model, lower_bound, upper_bound):
+    # Convert state to tensor
+    state = tf.expand_dims(tf.convert_to_tensor(state), 0)
+    # Evaluate policy
     sampled_actions = tf.squeeze(actor_model(state))
-    # Exploration noise
+    # Compute exploration noise (Gaussian noise)
     noise = np.random.normal(0, std_dev)
-    # if ep%2 == 0:
-    #     noise = np.array([noise, 0])
-    # else:
-    #     noise = np.array([0, noise])
     # Action + exploration
     sampled_actions_noise = sampled_actions.numpy() + noise
     # Upper and lower limitation of the action
     action_lim = np.clip(sampled_actions_noise, lower_bound, upper_bound)
 
-    return [np.squeeze(action_lim)], [np.squeeze(sampled_actions)], [np.squeeze(noise)]
+    return np.squeeze(action_lim), np.squeeze(sampled_actions), np.squeeze(noise)
 
 def getQvalue(q_table, state, action):
     state_axis = q_table[0]
