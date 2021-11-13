@@ -2,19 +2,30 @@
 """
 @author: bpintos
 """
+# Import packages
 import gym
 import numpy as np
 import tensorflow as tf
-# import matplotlib.pyplot as plt
 from trajectoryplan.trajplan import policy, get_NN, Buffer, update_target
 import random
 import os
+import time
+from tools.support_tools import plot_actor, plot_critic
+from subprocess import Popen
 
 # Make experiments reproducible
 np.random.seed(7)
 tf.random.set_seed(7)
 random.seed(123)
 
+# Start up CoppeliaSim
+Popen(['python3', 'coppelia/startupCoppelia.py'])
+time.sleep(10)
+
+# Start time
+start = time.time()
+
+# Main script
 if __name__ == "__main__":
 # =============================================================================
 #                            Experiment parameters
@@ -192,13 +203,34 @@ if __name__ == "__main__":
     # Print episodic reward
     print('Episodic Reward:', episodic_reward)
     
+    # Save the weights of the models
     if not(only_simulation):
         # Create folder
         if not os.path.exists('vehiclegym/weights/' + env_name + '_' + version + '/' + weights):
             os.makedirs('vehiclegym/weights/' + env_name + '_' + version + '/' + weights)
-        # Save the weights
         actor_model.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Actor_model_weights.h5')
         critic_model.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Critic_model_weights.h5')
         actor_target.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Actor_target_weights.h5')
         critic_target.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Critic_target_weights.h5')
     
+    # Plot the actor model
+    title = 'Actor model'
+    plot_actor(title, actor_model, env.observation_space.high, env.observation_space.low)
+    
+    # Plot the target actor model
+    title = 'Target actor model'
+    plot_actor(title, actor_target, env.observation_space.high, env.observation_space.low)
+    
+    # Plot the critic model
+    title = 'Critic model'
+    plot_critic(title, critic_model, env.observation_space.high, env.observation_space.low,\
+                env.action_space.high, env.action_space.low)
+    
+    # Plot the target critic model
+    title = 'Target critic model'
+    plot_critic(title, critic_target, env.observation_space.high, env.observation_space.low,\
+                env.action_space.high, env.action_space.low)
+    
+    # Compute elapsed time and print it
+    end = time.time()
+    print('Elapsed Time:', end - start)
