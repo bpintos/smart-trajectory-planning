@@ -6,7 +6,7 @@ def plot_actor(title, actor_model, state_upper_limit, state_lower_limit):
     ax = plt.axes(projection='3d')
     table_size = (20,20)
     x_axis = np.linspace(state_lower_limit[0], state_upper_limit[0], table_size[0])
-    y_axis = np.linspace(state_lower_limit[1], state_upper_limit[1], table_size[1])
+    y_axis = np.linspace(state_lower_limit[-1], state_upper_limit[-1], table_size[1])
     z_table = np.zeros(table_size)
     for i_x, x in enumerate(x_axis):
         for i_y, y in enumerate(y_axis):
@@ -25,7 +25,7 @@ def plot_critic(title, critic_model, state_upper_limit, state_lower_limit, actio
     table_size = (10,10,10)
     action_axis = np.linspace(action_lower_limit[0], action_upper_limit[0], table_size[0])
     x_axis = np.linspace(state_lower_limit[0], state_upper_limit[0], table_size[1])
-    y_axis = np.linspace(state_lower_limit[1], state_upper_limit[1], table_size[2])
+    y_axis = np.linspace(state_lower_limit[-1], state_upper_limit[-1], table_size[2])
     z_table = np.zeros(table_size)
     for i_x, x in enumerate(x_axis):
         for i_y, y in enumerate(y_axis):

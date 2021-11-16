@@ -48,10 +48,10 @@ class VehicleTfmEnv(gym.Env):
         self.action_space = spaces.Box(-high, high)
         
         # Observation space (normalized between 1 and 0)
-        # high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype = np.float32)
-        # low = np.array([0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, 0], dtype = np.float32)
-        high = np.array([1, 1], dtype = np.float32)
-        low = np.array([-1, -1], dtype = np.float32)
+        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1], dtype = np.float32)
+        low = np.array([0, 0, 0, 0, 0, 0, 0, 0, -1], dtype = np.float32)
+        # high = np.array([1, 1], dtype = np.float32)
+        # low = np.array([-1, -1], dtype = np.float32)
         self.observation_space = spaces.Box(low, high)
         
         # Scene handles
@@ -165,7 +165,7 @@ class VehicleTfmEnv(gym.Env):
         # Penalization if robot crashes into obstacle
         if all(laser_error == False for laser_error in lasers_error):
             for laser in lasers:
-                reward_obs = reward_obs + np.clip((laser-0.4)/self.min_distance2robot, -1, 0)
+                reward_obs = reward_obs + np.clip((laser-1)/self.min_distance2robot, -1, 0)
         else:
             reward_obs = 0
         
@@ -175,7 +175,7 @@ class VehicleTfmEnv(gym.Env):
         else:
             reward_dest = 0
         
-        reward = reward_dest
+        reward = reward_obs
         
         return reward
     
@@ -281,6 +281,7 @@ class VehicleTfmEnv(gym.Env):
         
         state = front_lasers + [vel_x] + [vel_y] + [vel_ang] + [distance2target]
         state = [pos_y] + [heading]
+        state = front_lasers + [vel_ang]
         
         # print(state)
         return state

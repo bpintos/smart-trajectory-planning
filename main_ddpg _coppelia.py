@@ -12,6 +12,7 @@ import os
 import time
 from tools.support_tools import plot_actor, plot_critic
 from subprocess import Popen
+import matplotlib.pyplot as plt
 
 # Make experiments reproducible
 np.random.seed(7)
@@ -19,8 +20,8 @@ tf.random.set_seed(7)
 random.seed(123)
 
 # Start up CoppeliaSim
-Popen(['python3', 'coppelia/startupCoppelia.py'])
-time.sleep(10)
+# Popen(['python3', 'coppelia/startupCoppelia.py'])
+# time.sleep(10)
 
 # Start time
 start = time.time()
@@ -35,16 +36,16 @@ if __name__ == "__main__":
     version = 'v1'
     
     # Neural networks parameters
-    critic_lr = 0.0002 # Learning rate critic network
+    critic_lr = 0.0005 # Learning rate critic network
     actor_lr = 0.00001 # Learning rate actor network
     actor_hidden_layers = (500,500,500) # Hidden layers of actor NN
     critic_hidden_layers = (500,500,500,500) # Hidden layers of critic NN
-    weights = 'center_lane' # Name of the folder which contains the weights
+    weights = 'obstacles_gamma09_stddevdecay09' # Name of the folder which contains the weights
     weights_available = False # Set to True if weights are available at the beggining
     only_simulation = True # Set to true for simulation mode, i.e. no training process (weights must be available)
     
     # DDPG algorithm parameters
-    total_episodes = 20 # Total number of learning episodes
+    total_episodes = 50 # Total number of learning episodes
     gamma = 0.9 # Discount factor for future rewards
     tau = 1 # Used to update target networks 
     std_dev = 0.5 # Exploration noise
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     number_IMU = 3 # Number variables calculated with IMU sensors (vx, vy, vang)
     number_GPS = 3 # Number variables calculated with GPS sensors (x, y, gamma)
     min_distance2robot = 0.15 # Minimum distance to obstacle to terminate learning episode
-    laser_range = 0.6 # Laser maximum range
+    laser_range = 2 # Laser maximum range
     wheelBase = 0.331 # Robot's wheel base distance
     wheelRadius = 0.0975 # Robot's wheel radius
     robotLinearVelocity = 0.2 # Robot's linear velocity
@@ -146,6 +147,7 @@ if __name__ == "__main__":
     if only_simulation:
         total_episodes = 1
         std_dev = 0
+        action_record = np.empty(0)
         
     for ep in range(total_episodes):
         
@@ -196,6 +198,10 @@ if __name__ == "__main__":
             state = state_next
             sensors_error = sensors_next_error
             actuators_error = actuators_next_error
+            
+            # Record data if only simulation
+            if only_simulation:
+                action_record = np.append(action_record, action)
     
     # Close the connection with Coppelia Sim
     env.closeEnvironment()
@@ -203,33 +209,47 @@ if __name__ == "__main__":
     # Print episodic reward
     print('Episodic Reward:', episodic_reward)
     
-    # Save the weights of the models
+    # Data post processing
     if not(only_simulation):
-        # Create folder
+        # Save the weights of the models
         if not os.path.exists('vehiclegym/weights/' + env_name + '_' + version + '/' + weights):
             os.makedirs('vehiclegym/weights/' + env_name + '_' + version + '/' + weights)
         actor_model.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Actor_model_weights.h5')
         critic_model.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Critic_model_weights.h5')
         actor_target.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Actor_target_weights.h5')
         critic_target.save_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights + '/Critic_target_weights.h5')
+    else:
+        # Plot main variables
+        fig = plt.figure(figsize=(18, 14))
+        ax1 = fig.add_subplot(111)
+    
+        plt.rcParams.update({'font.size': 22})
+        time = np.linspace(0, len(action_record)*0.2, len(action_record))
+        ax1.plot(time, action_record)
+        ax1.set_title('action [-]')
+        ax1.set_yticks(np.arange(-1, 1.1, step=0.5))
+        ax1.grid(color='gray', linestyle='-', linewidth=1)
+        fig.tight_layout(pad=1.0)
+        # fig.suptitle('', fontsize=30, y=1.02)
+        plt.show()
     
     # Plot the actor model
-    title = 'Actor model'
-    plot_actor(title, actor_model, env.observation_space.high, env.observation_space.low)
+    # title = 'Actor model'
+    # plot_actor(title, actor_model, env.observation_space.high, env.observation_space.low)
     
     # Plot the target actor model
-    title = 'Target actor model'
-    plot_actor(title, actor_target, env.observation_space.high, env.observation_space.low)
+    # title = 'Target actor model'
+    # plot_actor(title, actor_target, env.observation_space.high, env.observation_space.low)
     
     # Plot the critic model
-    title = 'Critic model'
-    plot_critic(title, critic_model, env.observation_space.high, env.observation_space.low,\
-                env.action_space.high, env.action_space.low)
+    # title = 'Critic model'
+    # plot_critic(title, critic_model, env.observation_space.high, env.observation_space.low,\
+    #             env.action_space.high, env.action_space.low)
     
     # Plot the target critic model
-    title = 'Target critic model'
-    plot_critic(title, critic_target, env.observation_space.high, env.observation_space.low,\
-                env.action_space.high, env.action_space.low)
+    # title = 'Target critic model'
+    # plot_critic(title, critic_target, env.observation_space.high, env.observation_space.low,\
+    #             env.action_space.high, env.action_space.low)
     
     # Compute elapsed time and print it
     end = time.time()
