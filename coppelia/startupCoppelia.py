@@ -9,4 +9,5 @@ Created on Sat Nov 13 13:11:36 2021
 import os
 
 os.chdir('../../CoppeliaSim')
-os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/PioneerScene.ttt')
+# os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/PioneerScene.ttt')
+os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/b1_scene.ttt')

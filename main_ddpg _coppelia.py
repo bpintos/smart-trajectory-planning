@@ -20,8 +20,8 @@ tf.random.set_seed(7)
 random.seed(123)
 
 # Start up CoppeliaSim
-# Popen(['python3', 'coppelia/startupCoppelia.py'])
-# time.sleep(10)
+Popen(['python3', 'coppelia/startupCoppelia.py'])
+time.sleep(10)
 
 # Start time
 start = time.time()
@@ -33,19 +33,19 @@ if __name__ == "__main__":
 # =============================================================================
     # Environment name
     env_name = 'diff_env_continuous'
-    version = 'v1'
+    version = 'v2'
     
     # Neural networks parameters
     critic_lr = 0.0005 # Learning rate critic network
     actor_lr = 0.00001 # Learning rate actor network
     actor_hidden_layers = (500,500,500) # Hidden layers of actor NN
     critic_hidden_layers = (500,500,500,500) # Hidden layers of critic NN
-    weights = 'obstacles_gamma09_stddevdecay09' # Name of the folder which contains the weights
+    weights = 'laser8_noobstacles_gamma09_stddevdecay095' # Name of the folder which contains the weights
     weights_available = False # Set to True if weights are available at the beggining
     only_simulation = True # Set to true for simulation mode, i.e. no training process (weights must be available)
     
     # DDPG algorithm parameters
-    total_episodes = 50 # Total number of learning episodes
+    total_episodes = 25 # Total number of learning episodes
     gamma = 0.9 # Discount factor for future rewards
     tau = 1 # Used to update target networks 
     std_dev = 0.5 # Exploration noise
@@ -57,14 +57,14 @@ if __name__ == "__main__":
     number_laser = 16 # Number proximity sensors
     number_IMU = 3 # Number variables calculated with IMU sensors (vx, vy, vang)
     number_GPS = 3 # Number variables calculated with GPS sensors (x, y, gamma)
-    min_distance2robot = 0.15 # Minimum distance to obstacle to terminate learning episode
+    min_distance2robot = 0.30 # Minimum distance to obstacle to terminate learning episode
     laser_range = 2 # Laser maximum range
     wheelBase = 0.331 # Robot's wheel base distance
     wheelRadius = 0.0975 # Robot's wheel radius
     robotLinearVelocity = 0.2 # Robot's linear velocity
     robotMaxLinearVelocity = 1 # Robot's maximum linear velocity
     robotMaxAngularVelocity = 0.5 # Robot's maximum angular velocity
-    goal = 4 # Destination coordinates (only x coordinate neccessary for the moment)
+    goal = 5 # Destination coordinates (only x coordinate neccessary for the moment)
     
 # =============================================================================
 #                        Register and load environment
@@ -224,8 +224,8 @@ if __name__ == "__main__":
         ax1 = fig.add_subplot(111)
     
         plt.rcParams.update({'font.size': 22})
-        time = np.linspace(0, len(action_record)*0.2, len(action_record))
-        ax1.plot(time, action_record)
+        time_plot = np.linspace(0, len(action_record)*0.2, len(action_record))
+        ax1.plot(time_plot, action_record)
         ax1.set_title('action [-]')
         ax1.set_yticks(np.arange(-1, 1.1, step=0.5))
         ax1.grid(color='gray', linestyle='-', linewidth=1)
