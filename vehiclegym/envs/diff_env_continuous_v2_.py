@@ -16,8 +16,8 @@ from motioncontrol.mtnctl import diffRobotControl
 class VehicleTfmEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
-    def __init__(self, number_proximity, number_laser, number_IMU, number_GPS, number_laser_rays,\
-                 min_distance2robot, laser_range, wheelBase, wheelRadius, robotLinearVelocity,\
+    def __init__(self, number_proximity, number_laser, number_IMU, number_GPS, min_distance2robot,\
+                 laser_range, wheelBase, wheelRadius, robotLinearVelocity,\
                      robotMaxLinearVelocity, robotMaxAngularVelocity, goal):
         super(VehicleTfmEnv, self).__init__()
         
@@ -34,9 +34,6 @@ class VehicleTfmEnv(gym.Env):
         self.sensors_error = [False]*(number_proximity+number_laser+number_IMU+number_GPS)
         self.actuators_error = [False, False]
         self.state = []
-        self.total_number_laser_rays = 684
-        possible_number_laser_rays = set([self.total_number_laser_rays//i for i in range(1,self.total_number_laser_rays)])
-        self.number_laser_rays = min(possible_number_laser_rays, key=lambda x:abs(x-number_laser_rays))
         self.min_distance2robot = min_distance2robot
         self.laser_range = laser_range
         self.wheelBase = wheelBase
@@ -52,10 +49,8 @@ class VehicleTfmEnv(gym.Env):
         self.action_space = spaces.Box(-high, high)
         
         # Observation space (normalized between 1 and 0)
-        high = np.ones(self.number_laser_rays, dtype = np.float32)
-        high = np.append(high, 1)
-        low = np.zeros(self.number_laser_rays, dtype = np.float32)
-        low = np.append(low, -1)
+        high = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype = np.float32)
+        low = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1], dtype = np.float32)
         # high = np.array([1, 1], dtype = np.float32)
         # low = np.array([-1, -1], dtype = np.float32)
         self.observation_space = spaces.Box(low, high)
@@ -170,8 +165,8 @@ class VehicleTfmEnv(gym.Env):
     def _reward(self):
         # Calculate reward value
         
-        # lasers = self.sensors[0:16]
-        # lasers_error = self.sensors_error[0:16]
+        lasers = self.sensors[0:16]
+        lasers_error = self.sensors_error[0:16]
         # velocities = self.sensors[16:19]
         # velocities_error = self.sensors_error[16:19]
         positions = self.sensors[19:22]
@@ -182,10 +177,15 @@ class VehicleTfmEnv(gym.Env):
         state_lasers = self.state[:-1]
         
         # Penalization if robot crashes into obstacle
+        # if all(laser_error == False for laser_error in lasers_error):
+        #     for laser in lasers:
+        #         reward_obs = reward_obs + np.clip((laser-1)/self.min_distance2robot, -1, 0)
+        # else:
+        #     reward_obs = 0
         reward_obs = 0
         if not(laser_sick_error):
             for state_laser in state_lasers:
-                reward_obs = reward_obs + np.clip((state_laser-0.2)/(0.2-self.min_distance2robot/5), -1, 0)
+                reward_obs = reward_obs + np.clip((state_laser-0.2)/0.2, -1, 0) + np.clip((state_laser-0.08)/0.08, -1, 0)
         else:
             reward_obs = 0
         
@@ -290,7 +290,7 @@ class VehicleTfmEnv(gym.Env):
             sensors.append(data)
             sensors_error.append(False)
         else:
-            sensors.append(np.zeros(self.total_number_laser_rays*2))
+            sensors.append(np.zeros(684*2))
             sensors_error.append(True)
         
         # print(sensors)
@@ -318,8 +318,7 @@ class VehicleTfmEnv(gym.Env):
         for i in range(0,len(laser_sick)-1,2):
            laser_distances.append(np.sqrt((laser_sick[i]-pos_x)**2 + (laser_sick[i+1]-pos_y)**2))
         laser_distances = [laser_distance/5 for laser_distance in laser_distances]
-        step_laser = self.total_number_laser_rays//self.number_laser_rays
-        laser_distances = np.clip(laser_distances[::step_laser],0,1)
+        laser_distances = np.clip(laser_distances[::20],0,1)
         
         distance2target = np.clip((self.goal - self.sensors[20])/8, 0, 1)
         

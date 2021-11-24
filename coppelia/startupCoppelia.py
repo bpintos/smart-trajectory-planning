@@ -10,4 +10,5 @@ import os
 
 os.chdir('../../CoppeliaSim')
 # os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/PioneerScene.ttt')
-os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/b1_scene.ttt')
+# os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/b1_scene.ttt')
+os.system('./coppeliaSim.sh /home/bpintos/Projects/smart-trajectory-planning/vehiclegym/envs/scene/Pionner_room_obstacles.ttt')

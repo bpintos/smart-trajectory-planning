@@ -53,9 +53,11 @@ class VehicleTfmEnv(gym.Env):
         
         # Observation space (normalized between 1 and 0)
         high = np.ones(self.number_laser_rays, dtype = np.float32)
-        high = np.append(high, 1)
+        high = np.append(high, [1])
         low = np.zeros(self.number_laser_rays, dtype = np.float32)
-        low = np.append(low, -1)
+        low = np.append(low, [-1])
+        # high = np.array([1], dtype = np.float32)
+        # low = np.array([-1], dtype = np.float32)
         # high = np.array([1, 1], dtype = np.float32)
         # low = np.array([-1, -1], dtype = np.float32)
         self.observation_space = spaces.Box(low, high)
@@ -148,19 +150,22 @@ class VehicleTfmEnv(gym.Env):
         positions_error = self.sensors_error[19:22]
         laser_sick_error = self.sensors_error[-1]
         
-        # Get state
-        state_lasers = self.state[:-1]
+        print('lasers:', lasers)
         
-        # if all(laser_error == False for laser_error in lasers_error) and any(laser <= self.min_distance2robot for laser in lasers):
+        # Get state
+        # state_lasers = self.state[:-2]
+        
+        # Check if episode is terminated
+        # if not(laser_sick_error) and any(state_laser*5 <= self.min_distance2robot for state_laser in state_lasers):
         #     done = True
-        # elif all(position_error == False for position_error in positions_error) and positions[1] >= self.goal:
+        # elif all(position_error == False for position_error in positions_error) and positions[1] >= self.goal[0] and positions[2] >= self.goal[1]:
         #     done = True
         # else:
         #     done = False
         
-        if not(laser_sick_error) and any(state_laser*5 <= self.min_distance2robot for state_laser in state_lasers):
+        if all(laser_error == False for laser_error in lasers_error) and any(laser <= self.min_distance2robot for laser in lasers):
             done = True
-        elif all(position_error == False for position_error in positions_error) and positions[2] >= self.goal:
+        elif all(position_error == False for position_error in positions_error) and positions[1] >= self.goal[0]-0.5 and positions[2] >= self.goal[1]-0.5:
             done = True
         else:
             done = False
@@ -180,6 +185,8 @@ class VehicleTfmEnv(gym.Env):
         
         # Get state
         state_lasers = self.state[:-1]
+        # distance2target = self.state[-1]
+        diff_heading = self.state[-1]
         
         # Penalization if robot crashes into obstacle
         reward_obs = 0
@@ -190,12 +197,15 @@ class VehicleTfmEnv(gym.Env):
             reward_obs = 0
         
         # Reward if robot moves forward to destination
-        if all(position_error == False for position_error in positions_error):
-            reward_dest = 1-abs(positions[2])
-        else:
-            reward_dest = 0
+        # if all(position_error == False for position_error in positions_error):
+        #     reward_dest = -distance2target*100
+        # else:
+        #     reward_dest = 0
         
-        reward = reward_obs
+        if all(position_error == False for position_error in positions_error):
+            reward_target_heading = -abs(diff_heading)
+        
+        reward = reward_target_heading + reward_obs #+ reward_dest
         
         return reward
     
@@ -304,12 +314,12 @@ class VehicleTfmEnv(gym.Env):
         # Get sensor values
         self.sensors, self.sensors_error = self._getSensors()
         
-        front_lasers = self.sensors[0:8]
-        front_lasers = [np.clip(i/self.laser_range, 0, 1) for i in front_lasers]
-        vel_x = np.clip(self.sensors[16]/self.robotMaxLinearVelocity, -1, 1)
-        vel_y = np.clip(self.sensors[17]/self.robotMaxLinearVelocity, -1, 1)
+        # front_lasers = self.sensors[0:8]
+        # front_lasers = [np.clip(i/self.laser_range, 0, 1) for i in front_lasers]
+        # vel_x = np.clip(self.sensors[16]/self.robotMaxLinearVelocity, -1, 1)
+        # vel_y = np.clip(self.sensors[17]/self.robotMaxLinearVelocity, -1, 1)
         vel_ang = np.clip(self.sensors[18]/self.robotMaxAngularVelocity, -1, 1)
-        heading = np.clip(self.sensors[19]/np.pi, -1, 1)
+        heading = self.sensors[19]
         pos_x = self.sensors[20]
         pos_y = self.sensors[21]
         laser_sick = self.sensors[22]
@@ -319,16 +329,27 @@ class VehicleTfmEnv(gym.Env):
            laser_distances.append(np.sqrt((laser_sick[i]-pos_x)**2 + (laser_sick[i+1]-pos_y)**2))
         laser_distances = [laser_distance/5 for laser_distance in laser_distances]
         step_laser = self.total_number_laser_rays//self.number_laser_rays
-        laser_distances = np.clip(laser_distances[::step_laser],0,1)
+        laser_distances = np.clip(laser_distances[::86],0,1)
         
-        distance2target = np.clip((self.goal - self.sensors[20])/8, 0, 1)
+        distance2target = np.clip(np.sqrt((self.goal[0]-pos_x)**2 + (self.goal[1]-pos_y)**2)/17, 0, 1)
         
-        state = front_lasers + [vel_x] + [vel_y] + [vel_ang] + [distance2target]
-        state = [pos_y] + [heading]
-        state = front_lasers + [vel_ang]
-        state = list(laser_distances) + [vel_ang]
+        heading_target = np.arctan2(self.goal[1]-pos_y, self.goal[0]-pos_x)
+        diff_heading = heading-heading_target
         
-        # print(state)
+        if diff_heading < -np.pi:
+            diff_heading_corrected = 2*np.pi + diff_heading
+        else:
+            diff_heading_corrected = diff_heading
+        
+        diff_heading_corrected = np.clip(diff_heading_corrected/np.pi, -1, 1)
+        
+        # state = front_lasers + [vel_x] + [vel_y] + [vel_ang] + [distance2target]
+        # state = [pos_y] + [heading]
+        # state = front_lasers + [vel_ang]
+        # state = list(laser_distances) + [vel_ang] + [distance2target]
+        state = list(laser_distances) + [diff_heading_corrected]
+        
+        # print('Heading:', diff_heading_corrected*180)
         return state
     
     def closeEnvironment(self):

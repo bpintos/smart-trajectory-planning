@@ -33,30 +33,32 @@ if __name__ == "__main__":
 # =============================================================================
     # Environment name
     env_name = 'diff_env_continuous'
-    version = 'v2'
+    version = 'v3'
     
     # Neural networks parameters
     critic_lr = 0.0005 # Learning rate critic network
     actor_lr = 0.00001 # Learning rate actor network
     actor_hidden_layers = (500,500,500) # Hidden layers of actor NN
     critic_hidden_layers = (500,500,500,500) # Hidden layers of critic NN
-    weights = 'laser8_noobstacles_gamma09_stddevdecay095' # Name of the folder which contains the weights
+    weights = 'goal_laser_obstacles_gamma09_stddevdecay099' # Name of the folder which contains the weights
     weights_available = False # Set to True if weights are available at the beggining
     only_simulation = True # Set to true for simulation mode, i.e. no training process (weights must be available)
     
     # DDPG algorithm parameters
-    total_episodes = 25 # Total number of learning episodes
+    total_episodes = 100 # Total number of learning episodes
     gamma = 0.9 # Discount factor for future rewards
     tau = 1 # Used to update target networks 
     std_dev = 0.5 # Exploration noise
-    std_dev_decay = 0.95 # Exploration noise decay
+    std_dev_decay = 0.99 # Exploration noise decay
     buffer_capacity = 50000 # Buffer capacity
     batch_size = 64 # Batch size
     
     # Robot parameters
-    number_laser = 16 # Number proximity sensors
+    number_proximity = 16 # Number proximity sensors
+    number_laser = 1 # Number laser sensors
     number_IMU = 3 # Number variables calculated with IMU sensors (vx, vy, vang)
     number_GPS = 3 # Number variables calculated with GPS sensors (x, y, gamma)
+    number_laser_rays = 8 # Number of laser rays considered in the laser sensor
     min_distance2robot = 0.30 # Minimum distance to obstacle to terminate learning episode
     laser_range = 2 # Laser maximum range
     wheelBase = 0.331 # Robot's wheel base distance
@@ -64,7 +66,7 @@ if __name__ == "__main__":
     robotLinearVelocity = 0.2 # Robot's linear velocity
     robotMaxLinearVelocity = 1 # Robot's maximum linear velocity
     robotMaxAngularVelocity = 0.5 # Robot's maximum angular velocity
-    goal = 5 # Destination coordinates (only x coordinate neccessary for the moment)
+    goal = (4,4) # Destination coordinates (only x coordinate neccessary for the moment)
     
 # =============================================================================
 #                        Register and load environment
@@ -75,9 +77,11 @@ if __name__ == "__main__":
     
     # Calibrate the parameters of the environment accordingly
     config = {
+        'number_proximity': number_proximity,
         'number_laser': number_laser,
         'number_IMU': number_IMU,
         'number_GPS': number_GPS,
+        'number_laser_rays': number_laser_rays,
         'min_distance2robot': min_distance2robot,
         'laser_range': laser_range,
         'wheelBase': wheelBase,
@@ -161,14 +165,14 @@ if __name__ == "__main__":
         while True:
             # Policy evaluation
             action, action_raw, action_noise = policy(state, std_dev, actor_model, lower_bound, upper_bound)
-            # action = 0 # Overwrite action. Only for testing purpuses
+            # action = 1 # Overwrite action. Only for testing purpuses
             
             # Perform action and observe next state and reward from environment
             state_next, reward, done, sensors_actuators_next_error = env.step(action)
             episodic_reward += reward
-            # print ('State:', state_next)
+            print ('State:', state_next)
             # print('Action:', action)
-            # print('Reward:', reward)
+            print('Reward:', reward)
             
             # Record data in buffer
             sensors_next_error = sensors_actuators_next_error[0]
