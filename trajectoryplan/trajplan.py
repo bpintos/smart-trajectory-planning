@@ -66,7 +66,6 @@ class Buffer:
 
         self.state_buffer[index] = obs_tuple[0]
         self.action_buffer[index] = obs_tuple[1]
-        # self.action_buffer[index] = tuple(obs_tuple[1][0])
         self.reward_buffer[index] = obs_tuple[2]
         self.next_state_buffer[index] = obs_tuple[3]
 
@@ -140,13 +139,20 @@ def get_NN(input_layer, hidden_layer, output_layer, hidden_activation = 'relu', 
     model.add(layers.Dense(units=output_layer, activation=output_activation, kernel_initializer=initializer))
     return model
 
-def policy(state, std_dev, actor_model, lower_bound, upper_bound):
+def policy(state, std_dev, actor_model, lower_bound, upper_bound, num_iter):
     # Convert state to tensor
     state = tf.expand_dims(tf.convert_to_tensor(state), 0)
     # Evaluate policy
     sampled_actions = tf.squeeze(actor_model(state))
     # Compute exploration noise (Gaussian noise)
     noise = np.random.normal(0, std_dev)
+    # frequency = 1
+    # noise = std_dev*np.sin(2*np.pi*frequency*num_iter*0.2)
+    if not(isinstance(noise, float)):
+        if num_iter%2 == 0:
+            noise = np.array([0, noise[1]])
+        else:
+            noise = np.array([noise[0], 0])
     # Action + exploration
     sampled_actions_noise = sampled_actions.numpy() + noise
     # Upper and lower limitation of the action
