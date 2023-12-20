@@ -29,23 +29,24 @@ if __name__ == "__main__":
 # =============================================================================
 #                                Load XML file
 # =============================================================================
-    param_file = 'param4.xml'
+    param_file = 'param11_ddpg.xml'
     tree = ET.parse('vehiclegym/param/'+ param_file)
     root = tree.getroot()
 # =============================================================================
 #                        Read parameters from XML file
 # =============================================================================
     # Environment name
-    env_name = root[0][0].text # Environment name
-    version = root[0][1].text # Environment version
-    only_simulation = root[0][2].text == 'True' # Set to true for simulation mode, i.e. no training process (weights must be available)
-    goal = ast.literal_eval(root[0][3].text) # Destination coordinates (only x coordinate neccessary for the moment)
+    vehicle = root[0][0].text # Vehicle type
+    env_name = root[0][1].text # Environment name
+    version = root[0][2].text # Environment version
+    only_simulation = root[0][3].text == 'True' # Set to true for simulation mode, i.e. no training process (weights must be available)
+    destinations = ast.literal_eval(root[0][4].text) # Destination coordinates (only x coordinate neccessary for the moment)
     
     # DDPG algorithm parameters
     total_episodes = int(root[1][0].text) # Total number of learning episodes
     gamma = float(root[1][1].text) # Discount factor for future rewards
     tau = float(root[1][2].text) # Used to update target networks 
-    std_dev = float(root[1][3].text) # Exploration noise
+    std_dev = np.array(ast.literal_eval(root[1][3].text)) # Exploration noise
     std_dev_decay = float(root[1][4].text) # Exploration noise decay
     buffer_capacity = int(root[1][5].text) # Buffer capacity
     batch_size = int(root[1][6].text) # Batch size
@@ -74,6 +75,9 @@ if __name__ == "__main__":
     # Coppelia scene and options
     scene = root[3][0].text
     coppelia_GUI = root[3][1].text == 'True'
+    
+    # Online learning
+    onlineLearning = False
 # =============================================================================
 #                        Register and load environment
 # =============================================================================
@@ -92,8 +96,8 @@ if __name__ == "__main__":
 #                        Register and load environment
 # =============================================================================
     # Environment name for registration
-    env_name_id = env_name + '-' + version
-    entry_point_name = 'vehiclegym.envs.' + env_name + '_' + version + ':VehicleTfmEnv'
+    env_name_id = vehicle + '_' + env_name + '-' + version
+    entry_point_name = 'vehiclegym.envs.vehicle.' + vehicle + '.' + env_name + '_' + version + ':VehicleTfmEnv'
     
     # Calibrate the parameters of the environment accordingly
     config = {
@@ -108,8 +112,7 @@ if __name__ == "__main__":
         'wheelRadius': wheelRadius,
         'robotLinearVelocity': robotLinearVelocity,
         'robotMaxLinearVelocity': robotMaxLinearVelocity,
-        'robotMaxAngularVelocity': robotMaxAngularVelocity,
-        'goal': goal
+        'robotMaxAngularVelocity': robotMaxAngularVelocity
     }
     
     # Registry of environment
@@ -149,10 +152,10 @@ if __name__ == "__main__":
     
     # Initialize weights
     if weights_available or only_simulation:
-        actor_target.load_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights_input + '/Actor_target_weights.h5')
-        critic_target.load_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights_input + '/Critic_target_weights.h5')
-        actor_model.load_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights_input + '/Actor_model_weights.h5')
-        critic_model.load_weights('vehiclegym/weights/' + env_name + '_' + version + '/' + weights_input + '/Critic_model_weights.h5')
+        actor_target.load_weights('vehiclegym/weights/' + vehicle + '/' + env_name + '_' + version + '/' + weights_input + '/Actor_target_weights.h5')
+        critic_target.load_weights('vehiclegym/weights/' + vehicle + '/' + env_name + '_' + version + '/' + weights_input + '/Critic_target_weights.h5')
+        actor_model.load_weights('vehiclegym/weights/' + vehicle + '/' + env_name + '_' + version + '/' + weights_input + '/Actor_model_weights.h5')
+        critic_model.load_weights('vehiclegym/weights/' + vehicle + '/' + env_name + '_' + version + '/' + weights_input + '/Critic_model_weights.h5')
     else:
         actor_target.set_weights(actor_model.get_weights())
         critic_target.set_weights(critic_model.get_weights())
@@ -171,35 +174,70 @@ if __name__ == "__main__":
     if only_simulation:
         total_episodes = 1
         std_dev = 0
-        action_record = np.empty(0)
-        accel_ang_record = np.empty(0)
-        vel_ang_record = np.empty(0)
+    
+    # Empty variables to record data
+    action_record = []
+    state_record = []
+    sensors_record = []
+    reward_record = []
+    episodic_reward_record = []
+    firstRun = True
+    destination_reached = False
         
     for ep in range(total_episodes):
         
         print('Episode: ', ep)
         episodic_reward = 0
-        state = env.reset()
+        num_iter = 0
         sensors_error = [True]*(number_laser + number_IMU + number_GPS)
         actuators_error = [True, True]
         std_dev = std_dev*std_dev_decay
         
+        if onlineLearning:
+            if firstRun:
+                state = env.reset()
+                env.setTargetDestination(firstRun, destinations)
+                firstRun = False
+            else:
+                if destination_reached:
+                    env.setTargetDestination(firstRun, destinations)
+                print('Backing up and Turning')
+                for _ in range(8):
+                    state, _, _ , _ = env.step(np.array([-0.2,0]))
+                for _ in range(20):
+                    state, _, _ , _ = env.step(np.array([0,1]))
+                print('Manouvring Completed')
+        else:
+            if firstRun:
+                state = env.reset()
+                env.setTargetDestination(firstRun, destinations)
+                firstRun = False
+            else:
+                if destination_reached:
+                    env.setTargetDestination(firstRun, destinations)
+                    state = env.reset()
+                else:
+                    state = env.reset()
+        
         while True:
             # Policy evaluation
-            action, action_raw, action_noise = policy(state, std_dev, actor_model, lower_bound, upper_bound)
-            # action = 0 # Overwrite action. Only for testing purpuses
+            action, action_raw, action_noise = policy(state, std_dev, actor_model, lower_bound, upper_bound, num_iter)
+            # action = [0.08, 0]# Overwrite action. Only for testing purpuses
             
             # Perform action and observe next state and reward from environment
-            state_next, reward, done, sensors_actuators_next_error = env.step(action)
+            state_next, reward, done, info = env.step(action)
+            # state_next, reward, done, info = env.step(np.array([0.2, 0])) # Overwrite action. Only for testing purpuses
             episodic_reward += reward
             # print ('State:', state_next)
             # print('Action:', action)
-            print('Reward:', reward)
+            # print('Reward:', reward)
             
             # Record data in buffer
-            sensors_next_error = sensors_actuators_next_error[0]
-            actuators_next_error = sensors_actuators_next_error[1]
-            sensors = sensors_actuators_next_error[2]
+            sensors_next_error = info[0]
+            actuators_next_error = info[1]
+            sensors = info[2]
+            counter_done = info[3]
+            destination_reached = info[4]
             
             # Learning process with replay buffer
             if not(only_simulation):
@@ -225,18 +263,27 @@ if __name__ == "__main__":
             state = state_next
             sensors_error = sensors_next_error
             actuators_error = actuators_next_error
+            num_iter += 1
             
-            # Record data if only simulation
+            # Print mean episodic reward
+            # print('Episodic Reward:', episodic_reward/num_iter)
+            
+            # Record data
             if only_simulation:
-                action_record = np.append(action_record, action*robotMaxAngularVelocity)
-                accel_ang_record = np.append(accel_ang_record, sensors[19])
-                vel_ang_record = np.append(vel_ang_record, sensors[18])
+                action_record.append(action)
+                state_record.append(state)
+                sensors_record.append(sensors)
+                reward_record.append(reward)
+        
+        # Print counter
+        print('Episode: ', ep)
+        print('counter_done:', counter_done)
+        episodic_reward_record.append(episodic_reward/num_iter)
+        if counter_done >= 50 and ep >= 50:
+            break
     
     # Close the connection with Coppelia Sim
     env.closeEnvironment()
-    
-    # Print episodic reward
-    print('Episodic Reward:', episodic_reward)
     
     # Data post processing
     if not(only_simulation):
@@ -250,20 +297,42 @@ if __name__ == "__main__":
     else:
         # Plot main variables
         fig = plt.figure(figsize=(18, 14))
-        ax1 = fig.add_subplot(211)
-        ax2 = fig.add_subplot(212)
-    
+        fontsize = 24
+        ax1 = fig.add_subplot(311)
+        ax2 = fig.add_subplot(312)
+        ax3 = fig.add_subplot(313)
         plt.rcParams.update({'font.size': 22})
         time_plot = np.linspace(0, len(action_record)*0.2, len(action_record))
-        # ax1.plot(time_plot, action_record, 'b')
-        ax1.plot(time_plot, vel_ang_record, 'r')
-        ax1.set_title('Vel ang [m/s]')
-        # ax1.set_yticks(np.arange(-1, 1.1, step=0.5))
+        # vel_ang = list(map(lambda x: x[1], action_record))
+        ax1.plot(time_plot, list(map(lambda x: x[0], action_record)), 'b')
+        ax1.plot(time_plot, list(map(lambda x: x[1], action_record)), 'r')
+        ax1.set_title('Actuator signals over time: Normalized linear (blue) and angular (red) velocities', fontsize=fontsize)
+        # ax1.set_xlabel('Time [s]')
+        ax1.set_ylabel('Normalized velocity [-]', fontsize=fontsize)
+        ax1.set_yticks(np.arange(-1, 1.1, step=0.2))
+        ax1.get_shared_x_axes().join(ax1, ax2, ax3)
+        ax1.set_xticklabels([])
         ax1.grid(color='gray', linestyle='-', linewidth=1)
-        ax2.plot(time_plot, accel_ang_record)
-        ax2.set_title('Angular acceleration [m/s2]')
-        # ax2.set_yticks(np.arange(-1, 1.1, step=0.5))
+        vel_x_record = list(map(lambda x: x[16], sensors_record))
+        vel_y_record = list(map(lambda x: x[17], sensors_record))
+        vel_lin_record = list(map(lambda x, y: np.sqrt(x**2 + y**2), vel_x_record, vel_y_record))
+        vel_ang_record = list(map(lambda x: x[18], sensors_record))
+        ax2.plot(time_plot, vel_lin_record, 'b')
+        ax2.plot(time_plot, vel_ang_record, 'r')
+        ax2.set_title('Sensor signals over time: Linear (blue) and angular (red) velocities', fontsize=fontsize)
+        # ax2.set_xlabel('Time [s]', fontsize=12)
+        ax2.set_ylabel('Velocity [m/s, rad/s]', fontsize=fontsize)
+        ax2.set_yticks(np.arange(-0.6, 0.65, step=0.2))
         ax2.grid(color='gray', linestyle='-', linewidth=1)
+        accel_ang_record = list(map(lambda x: x[19], sensors_record))
+        accel_lin_record = list(map(lambda x: x[20], sensors_record))
+        ax3.plot(time_plot, accel_lin_record, 'b')
+        ax3.plot(time_plot, accel_ang_record, 'r')
+        ax3.set_title('Evolution of linear and angular acceleration over time', fontsize=fontsize)
+        ax3.set_xlabel('Time [s]', fontsize=fontsize)
+        ax3.set_ylabel('Acceleration [m/s2, rad/s2]', fontsize=fontsize)
+        ax3.set_yticks(np.arange(-2, 2.6, step=0.5))
+        ax3.grid(color='gray', linestyle='-', linewidth=1)
         fig.tight_layout(pad=1.0)
         # fig.suptitle('', fontsize=30, y=1.02)
         plt.show()
@@ -285,6 +354,21 @@ if __name__ == "__main__":
     # title = 'Target critic model'
     # plot_critic(title, critic_target, env.observation_space.high, env.observation_space.low,\
     #             env.action_space.high, env.action_space.low)
+    
+    # Plot episodic reward
+    # fig = plt.figure(figsize=(18, 14))
+    # ax1 = fig.add_subplot(111)
+    # ax1.plot(episodic_reward_record_04, 'b', label='Single action, safety req.')
+    # ax1.plot(episodic_reward_record_05, 'r', label='Multiple actions, safety+legal req.')
+    # ax1.plot(episodic_reward_record_06, 'g', label='Multiple actions, safety+legal+comfort req.')
+    # ax1.plot(episodic_reward_record_07, 'k', label='Multiple actions, safety+legal+comfort req., stop strategy')
+    # ax1.set_yticks(np.arange(-1.5, 0.1, step=0.5))
+    # ax1.grid(color='gray', linestyle='-', linewidth=1)
+    # ax1.set_title('Episodic reward')
+    # ax1.set_xlabel('Episode number')
+    # ax1.set_ylabel('Episodic reward')
+    # ax1.legend()
+    # plt.show()
     
     # Compute elapsed time and print it
     end = time.time()
