@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<param>
+    <Environment>
+    	<vehicle>diff_robot</vehicle>
+        <env_name>env_continuous</env_name>
+        <version>v4</version>
+        <only_simulation>True</only_simulation>
+        <goal>[(0,6)]</goal>
+        <description>Maze without obstacles. Reward baseline must be 0. Two actions (linear and angular velocities). State: laser measurements + linear velocity + angular velocity + distance to destination. Safety, legal, comfort and task (energy) requirements. Stop strategy at destination</description>
+    </Environment>
+    <DDPG>
+        <total_episodes>100</total_episodes>
+        <gamma>0.9</gamma>
+        <tau>1</tau>
+        <std_dev>0.5</std_dev>
+        <std_dev_decay>0.99</std_dev_decay>
+        <buffer_capacity>50000</buffer_capacity>
+        <batch_size>64</batch_size>
+        <critic_lr>0.0005</critic_lr>
+        <actor_lr>0.00001</actor_lr>
+        <actor_hidden_layers>(500,500,500)</actor_hidden_layers>
+        <critic_hidden_layers>(500,500,500,500)</critic_hidden_layers>
+        <weights_input>07_maze_laser180_noobstacles_safety_legal_comfort_energy_req_stop</weights_input>
+        <weights_available>False</weights_available>
+        <weights_output>07_maze_laser180_noobstacles_safety_legal_comfort_energy_req_stop</weights_output>
+    </DDPG>
+    <Robot>
+        <number_proximity>16</number_proximity>
+        <number_laser>1</number_laser>
+        <number_IMU>4</number_IMU>
+        <number_GPS>3</number_GPS>
+        <number_laser_rays>180</number_laser_rays>
+        <laser_range>5</laser_range>
+        <wheelBase>0.331</wheelBase>
+        <wheelRadius>0.0975</wheelRadius>
+        <robotLinearVelocity>0.2</robotLinearVelocity>
+        <robotMaxLinearVelocity>1</robotMaxLinearVelocity>
+        <robotMaxAngularVelocity>0.5</robotMaxAngularVelocity>
+        <min_distance2robot>0.30</min_distance2robot>
+    </Robot>
+    <Coppelia>
+        <scene>Maze_NoObstacles.ttt</scene>
+        <coppelia_GUI>True</coppelia_GUI>
+    </Coppelia>
+</param>
